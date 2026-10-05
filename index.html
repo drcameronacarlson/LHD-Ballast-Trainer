@@ -1,0 +1,1832 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>LHD Ballast Trainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#E3E6E4; --panel:#CCD1CE; --panel-2:#BFC5C2; --edge:#98A19D; --plate:#EEF0EE;
+  --ink:#1A2023; --ink-2:#4B5652; --ink-3:#6E7A75;
+  --sea:#1D6C84; --sea-fill:rgba(29,108,132,.55); --sea-deep:#2B5F73; --sky:#DCE3E3;
+  --hull:#B9C0BC; --hull-line:#58625E; --tank:#F4F6F4; --tank-line:#7D8783;
+  --lamp-off:#39403E; --lamp-off-ink:#7F8A85; --lamp-on:#FFD68C; --lamp-on-ink:#3A2600; --lamp-glow:rgba(255,196,90,.55);
+  --btn:#E9ECEA; --btn-ink:#20282B; --btn-lit:#FFE3A8;
+  --ok:#2E8A57; --caution:#C98A12; --alarm:#C43E2B;
+  --font-legend:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#12171A; --panel:#1E2528; --panel-2:#262E31; --edge:#3A4447; --plate:#2A3235;
+    --ink:#E4EAE7; --ink-2:#A2AEA9; --ink-3:#7A8681;
+    --sea:#4DAFCB; --sea-fill:rgba(77,175,203,.45); --sea-deep:#1B4A5A; --sky:#182024;
+    --hull:#3A4447; --hull-line:#8A9691; --tank:#20282B; --tank-line:#66726D;
+    --lamp-off:#0D1112; --lamp-off-ink:#4E5854; --lamp-on:#FFCF7A; --lamp-on-ink:#2E1E00; --lamp-glow:rgba(255,190,80,.45);
+    --btn:#2C3538; --btn-ink:#E4EAE7; --btn-lit:#FFD68C;
+    --ok:#4FBF80; --caution:#E3A93A; --alarm:#EF6A55;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#12171A; --panel:#1E2528; --panel-2:#262E31; --edge:#3A4447; --plate:#2A3235;
+  --ink:#E4EAE7; --ink-2:#A2AEA9; --ink-3:#7A8681;
+  --sea:#4DAFCB; --sea-fill:rgba(77,175,203,.45); --sea-deep:#1B4A5A; --sky:#182024;
+  --hull:#3A4447; --hull-line:#8A9691; --tank:#20282B; --tank-line:#66726D;
+  --lamp-off:#0D1112; --lamp-off-ink:#4E5854; --lamp-on:#FFCF7A; --lamp-on-ink:#2E1E00; --lamp-glow:rgba(255,190,80,.45);
+  --btn:#2C3538; --btn-ink:#E4EAE7; --btn-lit:#FFD68C;
+  --ok:#4FBF80; --caution:#E3A93A; --alarm:#EF6A55;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1440px;margin:0 auto;padding-inline:16px;padding-block:14px 40px;display:flex;flex-direction:column;gap:14px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px}
+.brand h1{font-family:var(--font-legend);font-weight:700;font-size:30px;letter-spacing:.04em;text-transform:uppercase;margin:0;line-height:1}
+.brand p{margin:4px 0 0;color:var(--ink-2);font-size:13px}
+.simctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.clock{font-family:var(--font-mono);font-size:18px;font-variant-numeric:tabular-nums;padding:4px 10px;background:var(--lamp-off);color:var(--lamp-on);border-radius:3px;letter-spacing:.04em}
+.seg{display:inline-flex;border:1px solid var(--edge);border-radius:4px;overflow:hidden}
+.seg button{border:0;border-right:1px solid var(--edge);background:var(--btn);color:var(--btn-ink);font-family:var(--font-legend);font-weight:600;font-size:15px;padding:5px 10px;cursor:pointer;letter-spacing:.04em}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--ground)}
+.tbtn{border:1px solid var(--edge);background:var(--btn);color:var(--btn-ink);font-family:var(--font-legend);font-weight:600;font-size:15px;letter-spacing:.05em;padding:5px 12px;border-radius:4px;cursor:pointer;text-transform:uppercase}
+.tbtn[aria-pressed="true"]{background:var(--sea);color:#fff;border-color:var(--sea)}
+button:focus-visible{outline:2px solid var(--sea);outline-offset:2px}
+
+/* readouts */
+.readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--edge);border:1px solid var(--edge);border-radius:6px;overflow:hidden}
+.ro{background:var(--panel);padding:8px 12px 9px;display:flex;flex-direction:column;gap:2px}
+.ro .k{font-family:var(--font-legend);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.ro .v{font-family:var(--font-mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.1}
+.ro .s{font-size:12px;color:var(--ink-3);font-family:var(--font-mono)}
+.ro.warn .v{color:var(--caution)} .ro.crit .v{color:var(--alarm)} .ro.good .v{color:var(--ok)}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media (min-width:1120px){.main{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:12px 14px}
+.card h2{font-family:var(--font-legend);font-weight:700;font-size:16px;letter-spacing:.09em;text-transform:uppercase;margin:0 0 8px;color:var(--ink-2)}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.svgbox{width:100%;overflow-x:auto}
+.svgbox svg{display:block;width:100%;height:auto;min-width:560px}
+.note{font-size:12px;color:var(--ink-3)}
+.row2{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media (min-width:640px){.row2{grid-template-columns:230px minmax(0,1fr)}}
+
+/* alarms/objective/log */
+.obj{display:flex;flex-direction:column;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--font-legend);font-weight:600;font-size:14px;letter-spacing:.05em;padding:2px 8px;border-radius:3px;border:1px solid var(--edge);background:var(--plate);text-transform:uppercase}
+.chip.ok{border-color:var(--ok);color:var(--ok)} .chip.caution{border-color:var(--caution);color:var(--caution)} .chip.alarm{border-color:var(--alarm);color:#fff;background:var(--alarm)}
+.log{font-family:var(--font-mono);font-size:12px;max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.log li{display:flex;gap:10px} .log time{color:var(--ink-3);flex:none}
+.log li.alarm span{color:var(--alarm)} .log li.caution span{color:var(--caution)}
+
+/* tabs */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--edge);margin:-4px -14px 12px;padding:0 10px;overflow-x:auto}
+.tabs button{border:0;background:none;color:var(--ink-2);font-family:var(--font-legend);font-weight:700;font-size:16px;letter-spacing:.07em;text-transform:uppercase;padding:8px 10px;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--sea)}
+
+/* console primitives */
+.lamp{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:20px;padding:0 4px;background:var(--lamp-off);color:var(--lamp-off-ink);font-family:var(--font-legend);font-weight:700;font-size:12px;letter-spacing:.05em;border-radius:2px;text-transform:uppercase;user-select:none}
+.lamp.on,.lamptest .lamp{background:var(--lamp-on);color:var(--lamp-on-ink);box-shadow:0 0 8px var(--lamp-glow)}
+.lamp.transit{animation:blink .6s steps(2,start) infinite}
+.lamp.red.on{background:var(--alarm);color:#fff;box-shadow:0 0 8px var(--alarm)}
+.lamp.grn.on{background:var(--ok);color:#fff;box-shadow:0 0 8px var(--ok)}
+@keyframes blink{to{background:var(--lamp-on);color:var(--lamp-on-ink)}}
+@media (prefers-reduced-motion:reduce){.lamp.transit{animation:none;background:var(--caution);color:#fff}}
+.pb{display:inline-flex;align-items:center;justify-content:center;text-align:center;border:2px solid var(--edge);border-radius:3px;background:var(--btn);color:var(--btn-ink);font-family:var(--font-legend);font-weight:700;font-size:12.5px;letter-spacing:.04em;line-height:1.05;text-transform:uppercase;cursor:pointer;padding:3px 4px;min-height:34px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
+.pb:active{transform:translateY(1px);box-shadow:none}
+.pb.lit,.lamptest .pb{background:var(--btn-lit);color:#2A1C00;border-color:#C9A04A;box-shadow:0 0 10px var(--lamp-glow)}
+.pb:disabled{cursor:not-allowed;opacity:.45}
+.pb.wide{padding:4px 10px}
+
+/* well deck panel */
+.wdp{background:var(--panel-2);border:1px solid var(--edge);border-radius:14px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media (min-width:760px){.wdp{grid-template-columns:minmax(0,1fr) 190px}}
+.wdp-cols{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.wcol{display:flex;flex-direction:column;gap:5px;align-items:stretch;min-width:0}
+.ibox{border:1px solid var(--edge);background:var(--lamp-off);border-radius:2px;display:grid;grid-template-columns:1fr 1fr;gap:1px;padding:1px}
+.ibox .lamp{min-width:0;height:17px;font-size:10.5px;border-radius:1px}
+.ibox .lamp.full{grid-column:1/-1}
+.ilbl{font-family:var(--font-legend);font-size:11px;font-weight:600;color:var(--ink-2);letter-spacing:.06em;text-align:center;text-transform:uppercase}
+.plate{background:var(--plate);border:1px solid var(--edge);border-radius:2px;height:150px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.plate .name{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--font-legend);font-weight:700;font-size:18px;letter-spacing:.08em;position:relative;z-index:1}
+.plate .lvl{position:absolute;left:0;right:0;bottom:0;background:var(--sea-fill);transition:height .2s linear}
+.plate .pct{position:absolute;top:4px;left:0;right:0;text-align:center;font-family:var(--font-mono);font-size:11px;z-index:1;color:var(--ink-2)}
+.hide-levels .plate .lvl,.hide-levels .plate .pct{display:none}
+.wside{display:flex;flex-direction:column;gap:12px;align-items:center}
+.gauges{display:flex;gap:10px;justify-content:center;background:var(--plate);border:1px solid var(--edge);padding:8px 10px;border-radius:3px;width:100%}
+.gauge{display:flex;flex-direction:column;align-items:center;gap:4px}
+.gauge .gl{font-family:var(--font-legend);font-weight:700;font-size:11px;letter-spacing:.06em}
+.gauge svg{width:44px;height:170px}
+.gauge .gv{font-family:var(--font-mono);font-size:11px;font-variant-numeric:tabular-nums}
+.ctlbox{border:2px solid var(--ink);padding:4px;border-radius:3px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.ctlbox span{font-family:var(--font-legend);font-weight:700;font-size:11px;letter-spacing:.06em}
+
+/* DCC rows */
+.grp{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.grp h3{font-family:var(--font-legend);font-weight:700;font-size:14px;letter-spacing:.09em;text-transform:uppercase;margin:0;color:var(--ink-2);display:flex;justify-content:space-between;gap:10px}
+.grp h3 small{font-weight:500;letter-spacing:.03em;text-transform:none;font-family:var(--font-body);font-size:12px;color:var(--ink-3)}
+.trow{display:grid;grid-template-columns:92px minmax(90px,1fr) auto;gap:6px 10px;align-items:center;background:var(--plate);border:1px solid var(--edge);border-radius:3px;padding:6px 8px}
+.trow .id{font-family:var(--font-legend);font-weight:700;font-size:15px;letter-spacing:.04em}
+.trow .id small{display:block;font-family:var(--font-body);font-weight:400;font-size:11px;color:var(--ink-3);letter-spacing:0}
+.tli{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tli .bar{height:10px;background:var(--lamp-off);border-radius:2px;overflow:hidden}
+.tli .bar i{display:block;height:100%;background:var(--sea);width:0}
+.tli .bar.over i{background:var(--alarm)}
+.tli .t{font-family:var(--font-mono);font-size:11px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctl{display:flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:flex-end}
+.ctl .pb{min-height:28px;font-size:11.5px;min-width:44px}
+.ctl .lamps{display:flex;gap:3px}
+.ctl .lamps .lamp{min-width:30px;height:18px;font-size:10.5px}
+.sep{width:1px;height:22px;background:var(--edge);margin:0 2px}
+@media (max-width:620px){.trow{grid-template-columns:84px minmax(0,1fr)}.trow .ctl{grid-column:1/-1;justify-content:flex-start}}
+.lockmsg{font-size:12px;color:var(--caution);margin:0}
+
+/* DBAC */
+.rooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.room{background:var(--plate);border:1px solid var(--edge);border-radius:3px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.room h4{margin:0;font-family:var(--font-legend);font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.dbac{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center;border-top:1px solid var(--edge);padding-top:8px}
+.dbac .nm{font-family:var(--font-legend);font-weight:700;font-size:16px}
+.dbac .ps{font-family:var(--font-mono);font-size:12px;text-align:right}
+.dbac .btns{grid-column:1/-1;display:flex;gap:4px;flex-wrap:wrap}
+.dbac .btns .pb{flex:1;min-height:30px}
+.hdr{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;background:var(--plate);border:1px solid var(--edge);border-radius:3px;padding:8px 10px}
+.hdr .big{font-family:var(--font-mono);font-size:22px;font-variant-numeric:tabular-nums}
+#wellcv{display:block;width:100%;border-radius:4px;background:#1c2123;border:1px solid var(--edge)}
+.wellctl{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:10px;align-items:center}
+.wgrp{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.wlbl{font-family:var(--font-legend);font-weight:700;font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.wread{font-family:var(--font-mono);font-size:13px;font-variant-numeric:tabular-nums;min-width:12ch}
+.tbtn:disabled{opacity:.45;cursor:not-allowed}
+.tune{margin-top:10px;padding-top:8px;border-top:1px dashed var(--edge)}
+.tune input{width:140px;accent-color:var(--sea)}
+.tune select{font-family:var(--font-body);font-size:13px;padding:3px 6px;border:1px solid var(--edge);border-radius:3px;background:var(--btn);color:var(--btn-ink)}
+.linkbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:8px 12px}
+.linkbar input{font-family:var(--font-mono);font-size:13px;padding:4px 8px;border:1px solid var(--edge);border-radius:3px;background:var(--btn);color:var(--btn-ink);width:12ch}
+.linkbar .note{flex:1;min-width:220px}
+/* screen modes: instructor-only controls hidden on the trainee screen; trainee controls hidden or read-only on the instructor screen */
+body.mode-trainee .instrCtl{display:none!important}
+body.mode-instructor .traineeCtl{display:none!important}
+body.mode-instructor #pane-wd, body.mode-instructor #pane-dcc, body.mode-instructor #pane-air{pointer-events:none}
+.mirrorNote{display:none;margin:0 0 10px;font-size:13px;color:var(--caution);font-weight:600}
+body.mode-instructor .mirrorNote{display:block}
+.wellview{position:relative}
+.inclov{position:absolute;top:10px;right:10px;width:clamp(128px,33%,230px);background:var(--plate);border:1px solid var(--edge);border-radius:6px;padding:5px 7px 6px;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+#incl{width:100%;height:auto;display:block}
+#incl .needle{transition:transform .25s linear}
+@media (prefers-reduced-motion:reduce){#incl .needle{transition:none}}
+.inclread{display:flex;align-items:baseline;justify-content:center;gap:8px;margin-top:-2px}
+.inclread .iv{font-family:var(--font-mono);font-size:clamp(15px,2.2vw,22px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.inclread .is{font-family:var(--font-legend);font-weight:700;font-size:clamp(11px,1.4vw,14px);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.inclread.warn .iv{color:var(--caution)} .inclread.crit .iv{color:var(--alarm)}
+.wdp.dead .lamp,.wdp.dead .pb.lit{background:var(--lamp-off)!important;color:var(--lamp-off-ink)!important;box-shadow:none!important;animation:none!important;border-color:var(--edge)!important}
+.casrow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:8px}
+.casrow select{font-family:var(--font-body);font-size:13px;padding:4px 6px;border:1px solid var(--edge);border-radius:3px;background:var(--btn);color:var(--btn-ink);max-width:100%}
+.casrow .pb{min-height:30px;font-size:12px}
+.caslist{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.caslist li{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--plate);border:1px solid var(--edge);border-radius:3px;padding:5px 8px;font-size:13px}
+.caslist li .tm{font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-left:auto}
+.caslist li button{font-size:11px;padding:2px 6px}
+.foot{font-size:12px;color:var(--ink-3);max-width:80ch}
+.terms summary{cursor:pointer;color:var(--ink-2)}
+.terms p{margin:6px 0 0}
+.foot b{color:var(--ink-2)}
+</style>
+
+<div class="wrap" id="app">
+  <header class="top">
+    <div class="brand">
+      <h1>LHD Ballast Trainer</h1>
+      <p>Wasp-class ballast / deballast simulator · tank data from LHD-5 · unofficial training aid</p>
+    </div>
+    <div class="simctl">
+      <span class="clock" id="clock" aria-label="Simulation time">00:00:00</span>
+      <div class="seg" role="group" aria-label="Simulation speed" id="speed">
+        <button data-s="0" id="sp0">Pause</button>
+        <button data-s="1" id="sp1">1×</button>
+        <button data-s="10" id="sp10">10×</button>
+        <button data-s="30" id="sp30">30×</button>
+        <button data-s="60" id="sp60">60×</button>
+      </div>
+      <button class="tbtn" id="soundBtn" aria-pressed="false">Sound off</button>
+      <button class="tbtn" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <section class="linkbar" aria-label="Training screens">
+    <span class="wlbl">Screens</span>
+    <div class="seg" role="group" aria-label="Screen mode" id="modeSeg">
+      <button data-mode="solo" id="mdSolo">Solo</button>
+      <button data-mode="trainee" id="mdTrainee">Trainee</button>
+      <button data-mode="instructor" id="mdInstr">Instructor</button>
+    </div>
+    <label class="wlbl" for="sessCode">Session code</label>
+    <input id="sessCode" maxlength="24" value="drill-1" autocomplete="off" spellcheck="false">
+    <span class="chip" id="linkStat">Solo: one screen</span>
+    <span class="note" id="linkHint">Two screens: open this link on both, pick Trainee on one and Instructor on the other, same session code.</span>
+  </section>
+
+  <section class="readouts" aria-label="Ship condition">
+    <div class="ro" id="roF"><span class="k">Draft fwd</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roA"><span class="k">Draft aft</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roT"><span class="k">Trim</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roW"><span class="k">Well depth</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roL"><span class="k">List</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roG"><span class="k">GM (eff)</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roB"><span class="k">Ballast on</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roD"><span class="k">Displacement</span><span class="v">–</span><span class="s"></span></div>
+  </section>
+
+  <div class="main">
+    <div class="col">
+      <section class="card">
+        <h2>Well deck · from the control room, looking aft</h2>
+        <div class="wellview">
+          <canvas id="wellcv" aria-label="View down the well deck toward the stern gate"></canvas>
+          <div class="inclov" title="Inclinometer: reads toward the low side, 0–15° each side">
+            <svg id="incl" viewBox="0 0 300 172" role="img" aria-label="Inclinometer showing list"></svg>
+            <div class="inclread"><span class="iv" id="inclV">0.0°</span><span class="is" id="inclS">upright</span></div>
+          </div>
+        </div>
+        <div class="wellctl traineeCtl">
+          <div class="wgrp">
+            <span class="wlbl">Stern gate</span>
+            <div class="seg" role="group" aria-label="Stern gate command" id="gateSeg">
+              <button data-g="0" id="gt0">Close</button>
+              <button data-g="45" id="gt45">45°</button>
+              <button data-g="95" id="gt95">Full down</button>
+              <button data-g="stop" id="gtStop">Stop</button>
+            </div>
+            <span class="wread" id="gateRead">0° closed</span>
+          </div>
+          <div class="wgrp">
+            <span class="wlbl">Craft</span>
+            <div class="seg" role="group" aria-label="LCU load" id="lcuLoad">
+              <button data-l="light" id="lcuLight">Light</button>
+              <button data-l="loaded" id="lcuLoaded" aria-pressed="true">Loaded</button>
+            </div>
+            <button class="tbtn" id="bringLCU">Bring in LCU</button>
+            <button class="tbtn" id="bringLCAC">Bring in LCAC</button>
+            <button class="tbtn" id="launch">Launch craft</button>
+          </div>
+        </div>
+        <div class="wgrp tune instrCtl">
+          <label class="wlbl" for="gapTune">Flow at 45°</label>
+          <span class="note">slower</span><input type="range" id="gapTune" min="0.05" max="0.6" step="0.05"><span class="note">faster</span>
+          <span class="wread" id="gapRead"></span>
+          <span class="note">Tuning: set it so 3 ft at 45° takes as long as it did aboard.</span>
+        </div>
+        <div class="wgrp tune instrCtl">
+          <label class="wlbl" for="listTend">List as the well floods</label>
+          <select id="listTend">
+            <option value="random">Random strength</option>
+            <option value="off">Off</option>
+            <option value="mild">Mild</option>
+            <option value="moderate">Moderate</option>
+            <option value="strong">Strong</option>
+          </select>
+          <span class="note">Side is random and hidden. Watch the inclinometer. Changing this re-rolls the side.</span>
+        </div>
+        <div class="wgrp tune instrCtl">
+          <label class="wlbl" for="vehSel">Vehicles in the well</label>
+          <select id="vehSel">
+            <option value="none">None</option>
+            <option value="random">~350 LT, random side</option>
+            <option value="port">~350 LT, port side</option>
+            <option value="stbd">~350 LT, starboard side</option>
+          </select>
+          <span class="note">Staged at the forward end of the well, 12 ft off centerline.</span>
+        </div>
+        <p class="note" id="craftMsg">Lower the gate to 45° to let the first water in. At about 3 ft in the well, open it all the way. LCU needs 5 ft light or 7 ft loaded; LCAC needs a dry well (1 ft max).</p>
+      </section>
+      <section class="card">
+        <h2>Profile · looking to starboard</h2>
+        <div class="svgbox"><svg id="prof" viewBox="0 0 1000 285" role="img" aria-label="Ship profile with ballast tanks and waterline"></svg></div>
+        <p class="note">Vertical scale exaggerated 2.6×. Tank outlines are approximate; capacities are from ship data.</p>
+      </section>
+      <div class="row2">
+        <section class="card">
+          <h2>Stern view</h2>
+          <svg id="stern" viewBox="0 0 220 190" role="img" aria-label="Stern view showing list" style="width:100%;height:auto;display:block"></svg>
+          <p class="note">List exaggerated 3×.</p>
+        </section>
+        <section class="card obj">
+          <h2>Objective · wet well for LCU</h2>
+          <div class="chips" id="objChips"></div>
+          <p class="note" id="objNote">Ballast down, lower the gate to 45° for the first water, open full at about 3 ft, and hold 8–10 ft at the gate with under 1° of list. Ballast only until the well reaches the depth you need, then put those tanks back in NORMAL. Secure a little early: the well keeps rising while valves close. Bring the LCU in, launch it, then deballast to a dry well. Expect a list as the well floods. Prestage the wing walls to 25–50% on both sides before you lower the gate: that leaves room to fill the high side, and water above sea level to drain from the low side.</p>
+          <h2 style="margin-top:6px">Alarms</h2>
+          <div class="chips" id="alarms"></div>
+          <h2 style="margin-top:6px">Log</h2>
+          <ol class="log" id="log"></ol>
+        </section>
+      </div>
+    </div>
+
+    <div class="col">
+      <section class="card" id="consoleCard">
+        <p class="mirrorNote" id="mirrorNote">Instructor screen: this console mirrors the trainee live (read-only). Run the drill from the Casualties tab.</p>
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tab-wd" aria-selected="true" aria-controls="pane-wd">Well deck panel</button>
+          <button role="tab" id="tab-dcc" aria-selected="false" aria-controls="pane-dcc">DCC ballast</button>
+          <button role="tab" id="tab-air" aria-selected="false" aria-controls="pane-air">Deballast air</button>
+          <button role="tab" id="tab-cas" aria-selected="false" aria-controls="pane-cas">Casualties</button>
+        </div>
+
+        <div role="tabpanel" id="pane-wd"></div>
+        <div role="tabpanel" id="pane-dcc" hidden></div>
+        <div role="tabpanel" id="pane-air" hidden></div>
+        <div role="tabpanel" id="pane-cas" hidden>
+          <div class="grp instrCtl" id="casInstr">
+            <h3>Instructor<small>Inject a casualty. Hide names so the trainee has to diagnose from symptoms.</small></h3>
+            <div class="casrow">
+              <label class="wlbl" for="casSel">Casualty</label>
+              <select id="casSel"></select>
+              <button class="tbtn" id="casInject">Inject</button>
+            </div>
+            <div class="casrow">
+              <label class="note"><input type="checkbox" id="casHide"> Hide casualty names from the trainee</label>
+              <label class="note"><input type="checkbox" id="casAuto"> Random casualty during the evolution (3–12 min)</label>
+            </div>
+            <div class="casrow">
+              <label class="wlbl" for="tliChronic">Chronic bad TLI</label>
+              <select id="tliChronic"></select>
+              <span class="note">A tank whose TLI is always garbage. Teaches cross-checking by watching water move in or out of the well.</span>
+            </div>
+            <ul class="caslist" id="casList"></ul>
+          </div>
+          <div class="grp traineeCtl" id="casAct">
+            <h3>Casualty actions<small>Local actions take time. Watch the log for reports.</small></h3>
+            <div class="casrow">
+              <label class="wlbl" for="actTank">Tank</label><select id="actTank"></select>
+              <button class="pb wide" data-act="sound">Sound tank</button>
+              <button class="pb wide" data-act="reportTLI">Report TLI unreliable</button>
+              <button class="pb wide" data-act="vickers">Sea valve: Vickers valve at HPU</button>
+              <button class="pb wide" data-act="handPump">Sea valve: hand pump</button>
+              <button class="pb wide" data-act="isoFM">Isolate FM topping locally</button>
+            </div>
+            <div class="casrow">
+              <label class="wlbl" for="actHcs">HPU</label><select id="actHcs"></select>
+              <button class="pb wide" data-act="xconn">Cross-connect hydraulics</button>
+            </div>
+            <div class="casrow">
+              <label class="wlbl" for="actDbac">DBAC</label><select id="actDbac"></select>
+              <button class="pb wide" data-act="askDbac">Ask operator for status</button>
+              <button class="pb wide" data-act="closeUnloader">Close unloaders manually</button>
+              <button class="pb wide" data-act="addOil">Add lube oil &amp; reset</button>
+            </div>
+            <div class="casrow">
+              <span class="wlbl">Main air header</span>
+              <button class="pb wide" data-act="walkHeader">Walk the header</button>
+              <button class="pb wide" data-act="closeRelief">Close lifted relief</button>
+              <button class="pb wide" data-act="isoHdrP">Isolate port section</button>
+              <button class="pb wide" data-act="isoHdrS">Isolate stbd section</button>
+            </div>
+            <div class="casrow">
+              <button class="pb wide" data-act="firePump">Request DC: standby fire pump</button>
+              <button class="pb wide" data-act="notifyER">Engine room: vent condensers</button>
+              <button class="pb wide" data-act="localCtl">Man HPUs: local control</button>
+              <button class="pb wide" data-act="restorePower">Electrical: restore power</button>
+            </div>
+            <p class="note" id="procErrs"></p>
+            <p class="note">Start, stop and unloaders are on the Deballast air tab; taking the rapid tanks at the DCC is on the DCC ballast tab. Controlling actions are notional, drawn from public sources and a former LHD-5 ballast officer's experience. They are not the ship's EOCC or BOSS.</p>
+          </div>
+        </div>
+      </section>
+      <p class="foot"><b>Sources:</b> S9LHD-AE-SIB-170 Ch. 2 (Distribution A), SWOS 62B-402, LHD-3 SLCP, and a former LHD-5 ballast officer's recollection. Hull shape, tank geometry and GM are estimates tuned to observed drafts (27′/28′ normal, ~24′/38′ ballasted). Not a NAVSEA product. Always follow your ship's EOSS and ballast procedures.</p>
+      <details class="foot terms">
+        <summary><b>© 2026 Nautical Solutions, LLC. All rights reserved.</b> Terms of use</summary>
+        <p>LHD Ballast Trainer is free to use for individual training, instruction and evaluation by U.S. Navy and Marine Corps personnel and the people they train. It is not open source. You may not copy, redistribute, resell, sublicense, or build derivative or commercial products from this software, its physics model or its data without written permission from Nautical Solutions, LLC.</p>
+        <p>This is an unofficial training aid. It is not produced, endorsed or approved by the U.S. Navy, NAVSEA, or the Department of Defense. It is not a substitute for the ship's EOSS/BOSS, technical manuals, or qualified supervision, and must not be used to operate a ship. Controlling actions for casualties are notional.</p>
+        <p>Content comes only from Distribution A (approved for public release) and public sources, and from a former LHD-5 ballast officer's personal experience. It contains no classified, CUI or limited-distribution material. Hull geometry, tank geometry and several rates are estimates.</p>
+        <p>Provided "as is", without warranty of any kind. Nautical Solutions, LLC is not liable for any use of this software.</p>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+/* LHD Ballast Trainer. Copyright (c) 2026 Nautical Solutions, LLC. All rights reserved.
+   Not open source: no copying, redistribution or derivative works without written permission. */
+(()=>{
+/* ================= ENGINE ================= */
+const LWL=778, WELL_FLOOR=29, WELL_X0=LWL-266, WELL_W=50;
+const PSI_FT=64/144, G=32.174, PATM=14.7, FT3_LT=35;
+const DT=0.05;               // physics step (s)
+const CD_SEA=0.25, CD_DRAIN=0.6;
+const KB_AIR=2160/60/Math.sqrt(3); // scf/s per sqrt(psi) through a blow valve
+const VH=1500;               // blow header volume ft3
+const DBAC_SCFS=2160/60, RELIEF=20, START_T=12;
+const GM0=8;                 // assumed normal-condition GM (ft)
+const fx=f=>f<=33?3*f:99+7.07*(f-33);
+// Wing wall drain: effective area tuned so 2 draining + 2 filling take off ~1° in ~20 min (user)
+const A24=2*Math.PI*1*1, A6=2*Math.PI*.25*.25, A10=Math.PI*(5/12)**2, A6D=0.106;
+const gpm=g=>g/7.4805/60;
+// stern gate & well deck water (estimates, tune with user)
+// Per user: ~2 min closed->45°, ~4-5 min closed->full down
+const GATE_LEN=28, GATE_FULL=95, GATE_RATE_UP=0.4, GATE_RATE_LOW=1/3; // deg/s: 0-45° in ~1.9 min, 45-95° in ~2.5 min
+const gateRate=a=>a<45?GATE_RATE_UP:GATE_RATE_LOW;
+// Side-gap flow coefficient at partial gate angles. User: getting 3 ft at 45° "took some time" and
+// stretches total ballast time past the 15-min tank fill. Tunable from the well deck card.
+const TUNE={gap:0.25}; try{const v=parseFloat(localStorage.getItem('lhdbt-gap'));if(v>0)TUNE.gap=v;}catch(_){}
+const CD_OPEN=0.6;
+// List tendency as the well floods (per user): a transverse moment that grows with well water weight,
+// standing in for off-center loads that don't show while dry. Effect is amplified by the well's free
+// surface cutting GM. Value = transverse offset (ft) of the well-water moment; side is random per run.
+// Calibrated to user: uncorrected list reaches ~3° or more when nobody catches it (strong).
+const LIST_MAG={off:0,mild:2.5,moderate:5.5,strong:8.5};
+TUNE.list='random'; try{const v=localStorage.getItem('lhdbt-list'); if(v&&(v in LIST_MAG||v==='random')) TUNE.list=v;}catch(_){}
+// Causes named by user: vehicles in the well, the ship's load at initial ballast, overfilled wing walls.
+const VEH={LT:350, y:12, x:WELL_X0+40, z:WELL_FLOOR+5};   // vehicles staged at the fwd end of the well (estimate)
+// one tank whose TLI is always garbage: on LHD-5 it was 7-109-0-W (user), but it could be any TLI.
+// Instructor-selectable: none / random / a specific tank. Default 7-109.
+TUNE.tliChronic='7-109-0-W'; try{const v=localStorage.getItem('lhdbt-tlichronic'); if(v!=null) TUNE.tliChronic=v;}catch(_){}
+function applyChronicTLI(){
+  const ids=S.tanks.filter(t=>t.blowT).map(t=>t.id);
+  const id=TUNE.tliChronic==='random'?ids[Math.random()*ids.length|0]:TUNE.tliChronic;
+  S.tanks.forEach(t=>{t.tliChronic=t.id===id; t.tliReported=false;});
+}
+TUNE.veh='none'; try{const v=localStorage.getItem('lhdbt-veh'); if(['none','port','stbd','random'].includes(v)) TUNE.veh=v;}catch(_){}
+function rollList(){
+  let lv=TUNE.list; if(lv==='random'){const o=['mild','moderate','moderate','strong'];lv=o[Math.random()*o.length|0];}
+  S.listLvl=lv; S.yOff=(Math.random()<.5?-1:1)*LIST_MAG[lv]*(.8+Math.random()*.4);
+  // ship's load: shows up as ballast goes on (the evolution always starts at 0° list, per user)
+  S.M0=lv==='off'?0:(Math.random()<.5?-1:1)*(1000+Math.random()*2000);
+  const vs=TUNE.veh==='random'?(Math.random()<.5?'port':'stbd'):TUNE.veh;
+  S.vehSide=vs; S.vehY=vs==='stbd'?VEH.y:vs==='port'?-VEH.y:0;
+}
+const WELL_L=266;
+// well water surface is parallel to the waterline; hg = depth at the stern gate sill
+function wellVol(hg,s){ if(hg<=0) return 0; s=Math.max(s,1e-4); const Lw=hg/s;
+  return Lw<=WELL_L? WELL_W*hg*hg/(2*s) : WELL_W*WELL_L*(hg-s*WELL_L/2); }
+function wellLevel(V,s){ if(V<=0) return 0; s=Math.max(s,1e-4); const Vf=WELL_W*WELL_L*WELL_L*s/2;
+  return V<=Vf? Math.sqrt(2*s*V/WELL_W) : V/(WELL_W*WELL_L)+s*WELL_L/2; }
+function wellProps(hg,s){ // centroid x, z and wetted length
+  s=Math.max(s,1e-4); const Lw=hg/s;
+  if(Lw<=WELL_L) return {xc:LWL-Lw/3, zc:WELL_FLOOR+hg/3, L:Lw};
+  const d1=hg-s*WELL_L, xa=WELL_L*(hg+2*d1)/(3*(hg+d1));
+  return {xc:LWL-xa, zc:WELL_FLOOR+(hg*hg+hg*d1+d1*d1)/(3*(hg+d1)), L:WELL_L};
+}
+const CRAFT={
+  // user: LCU ~6 ft loaded; minimum ~5 ft of water depending on load. LCAC: dry well, 1 ft max.
+  LCU:{name:'LCU',L:135,B:29,fb:8,speed:4,loads:{light:{draft:4,need:5},loaded:{draft:6,need:7}}},
+  LCAC:{name:'LCAC',L:88,B:47,speed:5,maxWater:1},
+};
+
+// geometry: x ft aft of frame 0 (FP), z ft above keel, tcg + = stbd
+const DEF=[
+ // rapid ballast (well deck panel order is set in UI)
+ {id:'7-25-0-W', g:'rapid', x0:fx(25), x1:fx(33), zb:1, zt:15, cap:22186, sea:A24, blowT:1, est:'capacity derived'},
+ {id:'7-105-0-W',g:'rapid', x0:fx(105),x1:fx(109),zb:1, zt:22, cap:47287, sea:A24, blowT:1},
+ {id:'7-109-0-W',g:'rapid', x0:fx(109),x1:fx(113),zb:1, zt:22, cap:45233, sea:A24, blowT:1},
+ {id:'7-113-0-W',g:'rapid', x0:fx(113),x1:fx(117),zb:4, zt:23, cap:34719, sea:A24, blowT:1},
+ {id:'7-117-0-W',g:'rapid', x0:fx(117),x1:fx(125),zb:8, zt:23, cap:26724, sea:A24, blowT:1},
+ {id:'7-125-0-W',g:'rapid', x0:fx(125),x1:fx(129),zb:12,zt:24, cap:9269,  sea:A24, blowT:1},
+ // forward trim
+ {id:'7-K-0-W',  g:'fwd', x0:-25,     x1:fx(25), zb:2, zt:30, cap:42280, sea:A24, blowT:1, fm:gpm(500), est:'firemain rate est.'},
+ {id:'5-25-0-W', g:'fwd', x0:fx(25),  x1:fx(33), zb:16,zt:40, cap:23966, sea:A24, blowT:1, fm:gpm(500), est:'firemain rate est.'},
+ {id:'7-33-0-W', g:'fwd', x0:fx(33),  x1:fx(45), zb:5, zt:33, cap:37962, sea:A24, blowT:1, fm:gpm(500), est:'firemain rate est.'},
+ // aft misc
+ {id:'7-102-0-W',g:'aft', x0:fx(102),x1:fx(105),zb:1, zt:12, cap:3800,  sea:A6,  blowT:1, note:'6-in sea valves'},
+ {id:'7-121-7-W',g:'aft', x0:fx(121),x1:fx(125),zb:12,zt:36, cap:14224, sea:A10, blowT:1, fm:gpm(426), tcg:38, est:'sea valve size est.'},
+ {id:'7-121-8-W',g:'aft', x0:fx(121),x1:fx(125),zb:12,zt:36, cap:14224, sea:A10, blowT:1, fm:gpm(426), tcg:-38, est:'sea valve size est.'},
+ {id:'7-125-1-W',g:'aft', x0:fx(125),x1:fx(129),zb:14,zt:36, cap:12235, sea:A10, blowT:1, fm:gpm(359), tcg:36, est:'sea valve size est.'},
+ {id:'7-125-2-W',g:'aft', x0:fx(125),x1:fx(129),zb:14,zt:36, cap:12235, sea:A10, blowT:1, fm:gpm(359), tcg:-36, est:'sea valve size est.'},
+ // wing walls
+ ...[105,109,113,117].flatMap((f,i)=>{const cap=[10210,10233,10372,10372][i];return [
+   {id:`4-${f}-1-W`,g:'wing',x0:fx(f),x1:fx(f+4),zb:34,zt:50,cap,fm:gpm(323),drain:A6D,tcg:37,est:'drain size est.'},
+   {id:`4-${f}-2-W`,g:'wing',x0:fx(f),x1:fx(f+4),zb:34,zt:50,cap,fm:gpm(323),drain:A6D,tcg:-37,est:'drain size est.'}];}),
+];
+
+// Hull: waterplane keeps full breadth; section area = B*(d - D0), D0 calibrated so
+// 40,532 LT floats at 27'/28'. Tuned so 5 aft rapid + 7-102, gate down -> ~22'/38', 9 ft well.
+function beamAt(x){ if(x<0) return 0; if(x<200){const t=x/200;return 106*Math.max(.12,Math.pow(Math.sin(t*Math.PI/2),.75));} if(x<=560) return 106; const t=(x-560)/218; return 106-6*t*t;}
+function keelAt(x){ return x<=600?0:6*Math.pow((x-600)/178,1.6);}
+let D0=0;
+function hydro(Tf,Ta,gate){
+  let vol=0,mx=0,mz=0,it=0; const N=156,dx=LWL/N;
+  for(let i=0;i<N;i++){
+    const x=(i+.5)*dx, T=Tf+(Ta-Tf)*x/LWL, zk=keelAt(x), d=T-zk-D0; if(d<=0) continue;
+    const B=beamAt(x), a=B*d;
+    vol+=a*dx; mx+=a*x*dx; mz+=a*(zk+.54*(T-zk))*dx;
+    let iw=.9*B*B*B/12;
+    if(gate && x>=WELL_X0 && T>WELL_FLOOR){const h=T-WELL_FLOOR,l=WELL_W*h;vol-=l*dx;mx-=l*x*dx;mz-=l*(WELL_FLOOR+h/2)*dx;iw-=WELL_W**3/12;}
+    it+=iw*dx;
+  }
+  return {vol,lcb:mx/vol,kb:mz/vol,bm:it/vol};
+}
+{let lo=0,hi=15;for(let k=0;k<40;k++){D0=(lo+hi)/2;if(hydro(27,28,false).vol>40532*FT3_LT)lo=D0;else hi=D0;}}
+const H0=hydro(27,28,false), W0=40532, LCG0=H0.lcb, KG0=H0.kb+H0.bm-GM0;
+
+function solveDrafts(W,LCG,gate,Tf,Ta){
+  for(let k=0;k<8;k++){
+    const h=hydro(Tf,Ta,gate), r1=h.vol/FT3_LT-W, r2=h.lcb-LCG;
+    if(Math.abs(r1)<1&&Math.abs(r2)<.005) break;
+    const e=.02, h1=hydro(Tf+e,Ta,gate), h2=hydro(Tf,Ta+e,gate);
+    const a=(h1.vol-h.vol)/FT3_LT/e, b=(h2.vol-h.vol)/FT3_LT/e, c=(h1.lcb-h.lcb)/e, d=(h2.lcb-h.lcb)/e;
+    const det=a*d-b*c; if(!det) break;
+    let dTf=(-r1*d+b*r2)/det, dTa=(-a*r2+c*r1)/det;
+    const m=Math.max(Math.abs(dTf),Math.abs(dTa)); if(m>3){dTf*=3/m;dTa*=3/m;}
+    Tf+=dTf; Ta+=dTa;
+  }
+  return [Tf,Ta];
+}
+function solveList(W,M,GM,BM){
+  const s=M>=0?1:-1, Mm=M+s*1e-6*W;
+  const g=th=>W*Math.sin(th)*(GM+.5*BM*Math.tan(th)**2)-Mm*Math.cos(th);
+  let lo=0,hi=s*40*Math.PI/180;
+  if(Math.sign(g(hi))===Math.sign(g(lo))) return hi*180/Math.PI;
+  for(let i=0;i<40;i++){const m=(lo+hi)/2; if(Math.sign(g(m))===Math.sign(g(lo))) lo=m; else hi=m;}
+  return (lo+hi)/2*180/Math.PI;
+}
+const lin=(dp,k=.05)=>dp/Math.sqrt(Math.max(Math.abs(dp),k)); // ~sqrt(dp), linear near 0
+
+const S={};
+function init(){
+  S.t=0; S.gate=false; S.firemain=true; S.wdControl=false;
+  S.gateAng=0; S.gateTgt=0; S.wellV=0; S.hg=0; S.wellQ=0; S.craft=null; S.t45=null;
+  S.tOver1=0; S.maxList=0; S.prestage=null; S.prestageNote='';
+  rollList();
+  S.Tf=27; S.Ta=28; S.list=0; S.gm=GM0; S.W=W0;
+  S.mh=VH; S.Ph=0; S.relief=false;
+  S.tanks=DEF.map(d=>{
+    const b=d.cap/((d.x1-d.x0)*(d.zt-d.zb));
+    // Wide centerline tanks have centerline/longitudinal divisions with holes (user): free surface
+    // effect reduced to ~35% of an open tank (solid bulkhead would be 25%; holes let water equalize).
+    const fsmK=(d.g==='rapid'||d.id==='7-102-0-W')&&b>30?0.35:1;
+    return {...d,fsmK,tcg:d.tcg||0,b,xc:(d.x0+d.x1)/2,V:0,m:d.cap,mode:'NORMAL',
+      pos:{sea:0,blow:0,fm:0,drain:0},tgt:{sea:0,blow:0,fm:0,drain:0},flags:{}};
+  });
+  S.byId=Object.fromEntries(S.tanks.map(t=>[t.id,t]));
+  S.dbac=[1,2,3,4,5,6].map(n=>({n,state:'off',tm:0,loaded:false,failed:false,lowOil:false,unloaderStuck:false,failing:false,temp:85,loadT:-1}));
+  S.wdPanelPower=true; S.allPowerLost=false; S.procErrs=[]; S.dbacManned=false;
+  S.tanks.forEach(t=>{t.hcs=HCS.findIndex(h=>h.tanks.includes(t.id)); t.cmdT=0; t.stuckSea=false; t.fmStuck=false; t.tliFail=null; t.sounded=-1;
+    t.tliReported=false; t.tliJunk=Math.random()*.6+.2; t.tliJunkT=0;});
+  applyChronicTLI();
+  S.hcs=HCS.map(h=>({...h,up:true,xconn:false}));
+  S.cas=[]; S.localOps=[]; S.casAuto=null; S.erNotified=false; S.condAirbound=false;
+  S.dccPower=true; S.localCtl=false; S.hdrLeak=null; S.fmCas=false;
+  S.log=[]; S.alarmSet=new Set();
+  Object.assign(S,solveAndReturn());
+}
+const draftAt=x=>S.Tf+(S.Ta-S.Tf)*x/LWL;
+const STROKE={sea:20,blow:8,fm:8,drain:8};
+const MODES={NORMAL:{sea:0,blow:0},BALLAST:{sea:1,blow:0},PRE:{sea:0,blow:1},DEBLST:{sea:1,blow:1}};
+// Hydraulic power units for the sea valves: 2 HPUs (user). Which tanks each serves is NOT confirmed (estimate:
+// forward / aft). Cross-connecting is done manually along the line (user).
+const HCS=[
+  {id:'HPU-1',name:'Forward (est.)',tanks:['7-K-0-W','5-25-0-W','7-25-0-W','7-33-0-W']},
+  {id:'HPU-2',name:'Aft (est.)',tanks:['7-102-0-W','7-105-0-W','7-109-0-W','7-113-0-W','7-117-0-W','7-125-0-W','7-121-7-W','7-121-8-W','7-125-1-W','7-125-2-W']},
+];
+
+function step(dt){
+  S.t+=dt;
+  const la=Math.abs(S.list||0); if(la>1) S.tOver1+=dt; if(la>S.maxList) S.maxList=la;
+  // compressors
+  let supply=0;
+  for(const c of S.dbac){
+    if(c.state==='starting'){c.tm+=dt; if(c.tm>=START_T){c.state='running';log(`DBAC-${c.n} at speed, running unloaded`);}}
+    if(c.state==='running'&&c.loaded&&!c.unloaderStuck) supply+=DBAC_SCFS;   // stuck-open unloader dumps this unit's air
+    // discharge temperature: ~300°F loaded (user). Running unloaded it cools toward ~90°F, taking ~20-25 min to get
+    // below 100°F (est.; user: roughly 30 min). Stop rule is temperature: <=100°F OK to stop.
+    const Tt=c.state==='off'?85:(c.loaded&&!c.unloaderStuck?300:90), tau=c.state==='off'?900:(Tt>c.temp?45:450);
+    c.temp+=(Tt-c.temp)*Math.min(1,dt/tau);
+    // a failing unit left loaded seizes after ~5 min; unloading it takes the load off
+    if(c.failing&&c.state!=='off'&&c.loaded&&S.t-c.failT>300){c.state='off';c.loaded=false;c.failing=false;c.failed=true;
+      log(`DBAC-${c.n} seized: failure not secured in time. Unit out of service`,'alarm'); procErr(`DBAC-${c.n} failure not secured (unload, cool below 100°F, stop)`);}
+  }
+  let Ph=S.mh*PATM/VH-PATM, demand=0;
+  for(const t of S.tanks){
+    // valves
+    const slow=(!S.dccPower&&S.localCtl)?2:1;   // local control by phone talkers is slower
+    for(const k of ['sea','blow','fm','drain']){
+      if(S.allPowerLost&&k!=='sea') continue;                 // no power: motor-operated valves stay put
+      if(k==='sea'){ const h=S.hcs[t.hcs]; if(!S.allPowerLost&&((h&&!h.up&&!h.xconn)||t.stuckSea)) continue; }   // sea valves fail closed on power loss
+      if(k==='fm'&&t.fmStuck){ t.pos.fm=1; continue; }
+      const d=t.tgt[k]-t.pos[k]; if(d) t.pos[k]+=Math.sign(d)*Math.min(Math.abs(d),dt/(STROKE[k]*slow));}
+    const f=t.flags; f.blowThru=false; f.overflow=false; f.backflood=false; f.drainStall=false;
+    const Vair=Math.max(t.cap-t.V,.005*t.cap);
+    const vent=t.blowT? (1-t.pos.blow)>.05 : true;
+    if(vent) t.m=Vair;
+    let Pg=t.m*PATM/Vair-PATM;
+    const h=t.V/t.cap*(t.zt-t.zb), Tout=draftAt(t.xc);
+    // air in
+    if(t.blowT&&t.pos.blow>0){const dp=Ph-Pg; if(dp>0){const q=KB_AIR*t.pos.blow*lin(dp); t.m+=q*dt; demand+=q;}}
+    // sea valve
+    if(t.sea&&t.pos.sea>0){
+      Pg=t.m*PATM/Vair-PATM;
+      const pout=Math.max(0,Tout-t.zb)*PSI_FT, pin=Pg+h*PSI_FT, dp=pout-pin;
+      const Q=CD_SEA*t.sea*t.pos.sea*Math.sqrt(2*G/PSI_FT)*lin(dp);
+      if(dp>0){ t.V=Math.min(t.cap,t.V+Q*dt); if(t.mode==='DEBLST') f.backflood=true; }
+      else if(t.V>.5){ t.V=Math.max(0,t.V+Q*dt); }
+      else if(Pg>pout+.05){ f.blowThru=true; t.m=Vair*(PATM+pout)/PATM; }
+    }
+    // firemain topping
+    if(t.fm&&t.pos.fm>0&&S.firemain){ t.V+=t.fm*t.pos.fm*dt; if(t.V>=t.cap){t.V=t.cap;f.overflow=true;} }
+    // gravity drain overboard (confirmed by user): stops when tank level is down to outside sea level
+    if(t.drain&&t.pos.drain>0&&t.V>0){const hd=(t.zb+t.V/t.cap*(t.zt-t.zb))-Math.max(t.zb,Tout); if(hd>0.05){t.V=Math.max(0,t.V-CD_DRAIN*t.drain*t.pos.drain*Math.sqrt(2*G*hd)*dt);} else f.drainStall=true;}
+    t.V=Math.min(Math.max(t.V,0),t.cap);
+    if(!t.blowT||vent) t.m=Math.max(t.cap-t.V,.005*t.cap);
+    t.Pg=t.m*PATM/Math.max(t.cap-t.V,.005*t.cap)-PATM;
+  }
+  // stern gate motion
+  if(S.gateAng!==S.gateTgt){const d=S.gateTgt-S.gateAng; S.gateAng+=Math.sign(d)*Math.min(Math.abs(d),gateRate(d>0?S.gateAng:S.gateAng-1e-9)*dt);
+    if(S.gateAng===S.gateTgt) log(`Stern gate ${S.gateTgt===0?'closed':S.gateTgt>=GATE_FULL?'full down':Math.round(S.gateTgt)+'°'}`);}
+  S.gate=S.gateAng>0.5;
+  // well deck flooding / draining through the gate
+  const slope=Math.max((S.Ta-S.Tf)/LWL,1e-4), ho=S.Ta-WELL_FLOOR;
+  S.wellQ=0;
+  if(S.gateAng>0.5){
+    const htop=Math.max(ho,S.hg,0);
+    if(htop>0){
+      const phi=S.gateAng*Math.PI/180, full=S.gateAng>=85;
+      const A=full? WELL_W*htop : Math.min(WELL_W*htop, htop*htop*Math.tan(Math.min(phi,1.4)));
+      const dh=Math.max(ho,0)-S.hg;
+      const Q=(full?CD_OPEN:TUNE.gap)*A*Math.sqrt(2*G)*lin(dh,.01);
+      S.wellV=Math.max(0,S.wellV+Q*dt); S.wellQ=Q;
+    }
+  }
+  const hgPrev=S.hg;
+  S.hg=wellLevel(S.wellV,slope);
+  // timer: how long the gate has sat at 45° (for calibrating against real experience)
+  if(Math.abs(S.gateAng-45)<.01&&S.gateTgt===45){ if(S.t45==null) S.t45=S.t; } else S.t45=null;
+  if(hgPrev<3&&S.hg>=3){ log(S.t45!=null?`3 ft in the well, ${hms(S.t-S.t45).slice(3)} after the gate reached 45°`:'3 ft in the well'); }
+  // craft
+  const cr=S.craft;
+  if(cr){
+    const c=cr, spec=CRAFT[c.type];
+    const depthAt=x=>S.hg-slope*(LWL-x);
+    if(c.state==='entering'){
+      let nx=c.x-spec.speed*dt;
+      if(c.type==='LCU'&&depthAt(Math.max(nx,WELL_X0))<c.draft+.2&&nx<LWL){ c.state='docked'; c.aground=true; log('LCU touched bottom in the well: needs more water','caution'); }
+      else if(nx<=c.park){ nx=c.park; c.state='docked'; log(`${spec.name} in the well and secured`); }
+      c.x=nx;
+    } else if(c.state==='launching'){
+      c.x+=spec.speed*dt; if(c.x>LWL+spec.L+120){ log(`${spec.name} clear of the stern`); S.craft=null; }
+    } else if(c.state==='docked'&&c.type==='LCU'){
+      const gr=depthAt(c.x+spec.L/2)<c.draft; if(gr&&!c.aground) log('LCU aground on the well deck','caution'); c.aground=gr;
+    } else if(c.state==='docked'&&c.type==='LCAC'){
+      const wet=S.hg>spec.maxWater; if(wet&&!c.wet) log(`Water over ${spec.maxWater} ft with LCAC in the well`,'caution'); c.wet=wet;
+    }
+  }
+  S.mh+=(supply-demand)*dt;
+  // blow header rupture: air escapes until the damaged section is isolated
+  // sized so air never builds in the header (user: "no air would reach the header")
+  if(S.hdrLeak&&!S.hdrLeak.isolated) S.mh-=Math.min(S.mh-VH,(S.hdrLeak.type==='relief'?90:80)*Math.sqrt(Math.max(0,Ph)+.05)*dt);
+  // casualty bookkeeping: local actions completing, auto-injection, blow-through consequence, clears
+  // chronic garbage TLI: wanders and jumps regardless of the real level
+  for(const t of S.tanks) if(t.tliChronic&&S.t-t.tliJunkT>15){ t.tliJunkT=S.t;
+    t.tliJunk=Math.random()<.2?Math.random():Math.min(1,Math.max(0,t.tliJunk+(Math.random()-.5)*.25)); }
+  for(let i=S.localOps.length-1;i>=0;i--){const op=S.localOps[i]; if(S.t>=op.t){S.localOps.splice(i,1); op.fn();}}
+  if(S.casAuto&&S.t>=S.casAuto.at){const pick=pickCasualty(); S.casAuto=null; if(pick) injectCas(pick,S.casHide);}
+  if(!S.erNotified&&!S.condAirbound&&S.tanks.some(t=>t.flags.blowThru)){S.condAirbound=true; injectCas('condenser',false,true);}
+  for(const r of S.cas) if(r.tClr==null&&CAS[r.key].cleared(r)){ r.tClr=S.t; log(`Casualty controlled: ${r.name}${r.target?' ('+r.target+')':''} in ${hms(r.tClr-r.t0).slice(3)}`); }
+  S.mh=Math.max(S.mh,VH);
+  S.relief=false;
+  const maxM=(RELIEF+PATM)*VH/PATM;
+  if(S.mh>maxM){S.mh=maxM; if(supply>0) S.relief=true;}
+  if(supply===0) S.mh-=Math.min(S.mh-VH,(S.mh-VH)*.002*dt);
+  S.Ph=S.mh*PATM/VH-PATM;
+}
+function solveAndReturn(){
+  let W=W0,Mx=W0*LCG0,Mz=W0*KG0,My=0,fsm=0,bal=0;
+  for(const t of S.tanks||[]){
+    const w=t.V/FT3_LT; if(w<=0) continue;
+    const h=t.V/t.cap*(t.zt-t.zb);
+    W+=w; bal+=w; Mx+=w*t.xc; Mz+=w*(t.zb+h/2); My+=w*t.tcg;
+    const fr=t.V/t.cap; if(fr>.01&&fr<.99) fsm+=(t.x1-t.x0)*t.b**3/12/FT3_LT*(t.fsmK||1);
+  }
+  // Ship is always upright at the start (user never began a ballast evolution with a list).
+  // Load-condition moment builds as ballast goes on; the vehicle moment builds as the well floods.
+  My+=(S.M0||0)*Math.min(1,bal/4800);
+  if(S.vehSide&&S.vehSide!=='none'){W+=VEH.LT; Mx+=VEH.LT*VEH.x; Mz+=VEH.LT*VEH.z; My+=VEH.LT*S.vehY*Math.min(1,(S.hg||0)/6);}
+  // well deck water: added weight at its centroid, plus its free surface (50 ft wide)
+  let wellLT=0;
+  if(S.wellV>1){
+    const s=Math.max(((S.Ta??28)-(S.Tf??27))/LWL,1e-4), wp=wellProps(S.hg,s);
+    wellLT=S.wellV/FT3_LT; W+=wellLT; Mx+=wellLT*wp.xc; Mz+=wellLT*wp.zc; My+=wellLT*(S.yOff||0);
+    fsm+=WELL_W**3/12*wp.L/FT3_LT;
+  }
+  const LCG=Mx/W, KG=Mz/W;
+  const [Tf,Ta]=solveDrafts(W,LCG,false,S.Tf??27,S.Ta??28);
+  const h=hydro(Tf,Ta,false);
+  const gm=h.kb+h.bm-KG, gmEff=gm-fsm/W;
+  const list=solveList(W,My,gmEff,h.bm);
+  return {W,Tf,Ta,gm:gmEff,gmSolid:gm,list,wellD:S.hg||0,bal,KG,wellLT};
+}
+
+/* ============== commands ============== */
+function log(msg,sev=''){S.log.unshift({t:S.t,msg,sev}); if(S.log.length>80) S.log.pop(); dirtyLog=true;}
+function setMode(t,mode){
+  if(!t.blowT||t.mode===mode) return;
+  t.mode=mode; t.tgt.sea=MODES[mode].sea; t.tgt.blow=MODES[mode].blow; t.cmdT=S.t;
+  log(`${t.id} → ${mode==='PRE'?'PRE DEBLST':mode}`);
+}
+function toggleValve(t,k,label){t.tgt[k]=t.tgt[k]?0:1; t.cmdT=S.t; log(`${t.id} ${label} ${t.tgt[k]?'open':'shut'}`);}
+
+/* ============== casualty control (LHD; controlling actions are NOTIONAL, not the ship's EOCC) ============== */
+const rnd=a=>a[Math.random()*a.length|0];
+const dbacOf=r=>S.dbac[+r.target.split('-')[1]-1];
+const liveDbac=()=>S.dbac.filter(c=>!c.failed&&!c.lowOil);
+const CAS={
+  // --- DBACs (per user: unloader fails to close; low oil trip; failure while running -> unload, cool <100°F, stop)
+  unloader:{name:'DBAC unloader valve fails to close',
+    inject(){const c=liveDbac().find(c=>c.loaded&&!c.unloaderStuck)||liveDbac().find(c=>c.state!=='off'&&!c.unloaderStuck)||rnd(liveDbac()); if(!c) return null;
+      c.unloaderStuck=true; return `DBAC-${c.n}`;},
+    cleared:r=>!dbacOf(r).unloaderStuck},
+  lowOil:{name:'DBAC trip on low lube oil',
+    inject(){const c=liveDbac().find(c=>c.loaded)||liveDbac().find(c=>c.state!=='off')||rnd(liveDbac()); if(!c) return null;
+      c.state='off'; c.loaded=false; c.lowOil=true; return `DBAC-${c.n}`;},
+    cleared:r=>S.dbac.some(c=>!c.failed&&!c.lowOil&&!c.unloaderStuck&&c.loaded&&c.loadT>r.t0)},
+  dbacFail:{name:'DBAC failing while running (high vibration)',
+    inject(){const c=liveDbac().find(c=>c.state==='running'&&c.loaded)||liveDbac().find(c=>c.state==='running'); if(!c) return null;
+      c.failing=true; c.failT=S.t; return `DBAC-${c.n}`;},
+    // controlled once the load is off (unloaders open); securing after cool-down is still checked on STOP
+    cleared:r=>{const c=dbacOf(r); return !c.failing||!c.loaded;}},
+  // --- main air header (per user: no air reaches the header; walk it, close the lifted relief or find the leak)
+  hdrRelief:{name:'Relief valve lifted on main air header',
+    inject(){const side=Math.random()<.5?'port':'stbd'; S.hdrLeak={type:'relief',side,fr:rnd([50,82,127]),found:false,isolated:false}; return `${side} header`;},
+    cleared:()=>!S.hdrLeak||S.hdrLeak.isolated},
+  hdrRupture:{name:'Main air header leak',
+    inject(){const side=Math.random()<.5?'port':'stbd', a=rnd([40,60,82,100]); S.hdrLeak={type:'rupture',side,fr:a,found:false,isolated:false}; return `${side} header`;},
+    cleared:()=>!S.hdrLeak||S.hdrLeak.isolated},
+  // --- sea valves / hydraulics (per user: operate at the HPU with the Vickers valve; hand pump if all else fails; 2 HPUs)
+  stuckSea:{name:'Sea valve stuck',
+    inject(){const moving=S.tanks.filter(t=>t.sea&&t.mode!=='NORMAL'), t=moving.length?rnd(moving):rnd(S.tanks.filter(t=>t.g==='rapid')); t.stuckSea=true; return t.id;},
+    cleared:r=>!S.byId[r.target].stuckSea},
+  hcsLoss:{name:'Hydraulic power unit failure',
+    inject(){const h=rnd(S.hcs.filter(h=>h.up)); if(!h) return null; h.up=false; h.xconn=false; return h.id;},
+    cleared:r=>S.hcs.find(h=>h.id===r.target).xconn},
+  tliFail:{name:'Tank level indicator failure',
+    inject(){const c=S.tanks.filter(t=>t.blowT&&t.mode!=='NORMAL'), t=c.length?rnd(c):rnd(S.tanks.filter(t=>t.g==='rapid')); t.tliFail={reads:t.V/t.cap}; return t.id;},
+    // controlled by sounding, or by the operator correctly calling the TLI bad from other indications
+    // (user: watch the well deck water; if it's still moving in/out, the tank is working and the TLI is garbage)
+    cleared:r=>{const t=S.byId[r.target]; return t.sounded>r.t0||t.tliReported;}},
+  fmStuck:{name:'Firemain topping valve failed open',
+    inject(){const c=S.tanks.filter(t=>t.g==='wing'&&t.V/t.cap<.9), t=rnd(c.length?c:S.tanks.filter(t=>t.g==='wing')); t.fmStuck=true; t.pos.fm=1; return t.id;},
+    cleared:r=>!S.byId[r.target].fmStuck},
+  fmLoss:{name:'Loss of firemain pressure',
+    inject(){S.firemain=false; S.fmCas=true; return '';}, cleared:()=>S.firemain},
+  // --- power (per user: DCC loss -> well deck panel has the rapid tanks; panel loss -> DCC takes them;
+  //     total loss -> operation halts, sea valves fail closed)
+  dccPower:{name:'Loss of power to DCC ballast section',
+    inject(){S.dccPower=false; S.localCtl=false; return '';}, cleared:()=>S.dccPower||(S.wdControl&&S.wdPanelPower)},
+  wdPower:{name:'Loss of power to well deck ballast panel',
+    inject(){S.wdPanelPower=false; return '';}, cleared:()=>S.wdPanelPower||!S.wdControl},
+  allPower:{name:'Total loss of ballast control power',
+    inject(){ S.allPowerLost=true; S.dccPower=false; S.wdPanelPower=false; S.firemain=false;
+      S.tanks.forEach(t=>{ if(t.sea){t.tgt.sea=0; if(t.blowT) t.mode='NORMAL';} });
+      S.dbac.forEach(c=>{ if(c.state!=='off'){c.state='off'; c.loaded=false;} });
+      return ''; },
+    cleared:()=>!S.allPowerLost},
+  condenser:{name:'Condensers air-bound from blow-through', auto:true,
+    inject(){return '';}, cleared:()=>!S.condAirbound},
+};
+function pickCasualty(){
+  const ok=Object.keys(CAS).filter(k=>!CAS[k].auto&&!S.cas.some(r=>r.key===k&&r.tClr==null));
+  const running=S.dbac.some(c=>c.state==='running'), loaded=S.dbac.some(c=>c.loaded);
+  const pref=ok.filter(k=>{
+    if(k==='dbacFail'||k==='lowOil'||k==='unloader') return running;
+    if(k==='hdrRelief'||k==='hdrRupture') return loaded;
+    if(k==='wdPower') return S.wdControl;
+    return true;});
+  return pref.length?rnd(pref):ok.length?rnd(ok):null;
+}
+function injectCas(key,hidden,auto){
+  const target=CAS[key].inject(); if(target==null) return null;
+  const r={key,name:CAS[key].name,target,t0:S.t,tClr:null,hidden:!!hidden}; S.cas.push(r);
+  if(auto) log(`Engine room: main condenser vacuum dropping. Condensers air-bound from ballast air`,'alarm');
+  else if(!hidden) log(`CASUALTY: ${r.name}${target?' ('+target+')':''}`,'alarm');
+  return r;
+}
+function localOp(delay,msg,fn){ S.localOps.push({t:S.t+delay,fn}); log(msg); }
+const ACT={
+  sound(t){localOp(120,`Sounding team sent to ${t.id}`,()=>{t.sounded=S.t; const fr=t.V/t.cap;
+    const bad=t.tliFail||t.tliChronic;
+    log(`Sounding ${t.id}: ${Math.round(fr*100)}% (${fmt(fr*(t.zt-t.zb),1)} ft)${bad?`. TLI reads ${Math.round(tli(t)*100)}%: TLI is bad`:'. Agrees with TLI'}`,bad?'caution':'');});},
+  reportTLI(t){
+    if(t.tliFail||t.tliChronic){ if(t.tliReported){log(`${t.id} TLI already logged unreliable`);return;}
+      t.tliReported=true; log(`${t.id} TLI logged unreliable. Tracking the tank by well deck water and drafts`); }
+    else procErr(`${t.id} TLI called bad, but it is reading correctly (sound the tank if in doubt)`);},
+  vickers(t){ if(!t.sea){log(`${t.id} has no sea valve`);return;}
+    const h=S.hcs[t.hcs], hyd=!h||h.up||h.xconn;
+    localOp(90,`Sent to ${h?h.id:'the HPU'} to operate ${t.id} sea valve with the Vickers valve (manual override)`,()=>{
+      if(!hyd){log(`${t.id}: no hydraulic pressure at ${h.id}. Vickers override won't move the valve. Cross-connect or use the hand pump`,'caution');return;}
+      if(t.stuckSea){t.pos.sea=t.tgt.sea; t.stuckSea=false; log(`${t.id} sea valve ${t.tgt.sea?'opened':'shut'} locally with the Vickers valve`);}
+      else log(`${t.id}: local reports sea valve operating normally`);});},
+  handPump(t){ if(!t.sea){log(`${t.id} has no sea valve`);return;}
+    localOp(300,`DC team rigging the hand pump on ${t.id} sea valve`,()=>{
+      const h=S.hcs[t.hcs];
+      if(t.stuckSea||(h&&!h.up&&!h.xconn)||S.allPowerLost){t.pos.sea=t.tgt.sea; t.stuckSea=false; log(`${t.id} sea valve ${t.tgt.sea?'opened':'shut'} by hand pump`);}
+      else log(`${t.id}: sea valve operating normally, hand pump not needed`);});},
+  isoFM(t){ if(!t.fm){log(`${t.id} has no firemain topping`);return;}
+    localOp(90,`Sent to isolate firemain topping to ${t.id} locally`,()=>{t.fmStuck=false; t.pos.fm=0; t.tgt.fm=0; log(`${t.id} firemain topping isolated at the root valve`);});},
+  xconn(h){ const donor=S.hcs.find(x=>x.up&&x!==h); if(h.up){log(`${h.id} is operating normally`);return;} if(!donor){log('No HPU available to cross-connect','caution');return;}
+    localOp(240,`Cross-connecting hydraulics from ${donor.id} to ${h.id} along the line`,()=>{h.xconn=true; log(`${h.id} valves now powered from ${donor.id}`);});},
+  walkHeader(){ const L=S.hdrLeak&&!S.hdrLeak.isolated?S.hdrLeak:null;
+    localOp(L&&L.type==='rupture'?480:240,'Walking the main air header',()=>{
+      if(!L) log('Main air header walked: no lifted reliefs or leaks found');
+      else if(L.type==='relief'){L.found=true; log(`Relief valve lifted on ${L.side} main air header near FR ${L.fr}`,'caution');}
+      else {L.found=true; log(`Air leak found on ${L.side} main air header near FR ${L.fr}`,'caution');}});},
+  closeRelief(){ const L=S.hdrLeak;
+    if(!L||L.type!=='relief'||!L.found){log('No lifted relief valve located. Walk the main air header first');return;}
+    localOp(30,`Closing lifted relief valve, ${L.side} main air header FR ${L.fr}`,()=>{L.isolated=true; log('Relief valve closed. Main air header pressure climbing');});},
+  isoHdr(side){ localOp(20,`Shutting sectionalizing valves: ${side} main air header`,()=>{
+    if(S.hdrLeak&&S.hdrLeak.side===side&&!S.hdrLeak.isolated){S.hdrLeak.isolated=true; log(`${side} main air header section isolated. Header pressure climbing; tanks fed through cross-connects`);}
+    else log(`${side} main air header section isolated: no change in header pressure`);});},
+  // DBAC rooms: operators must be on station and in comms (user). Unmanned rooms add travel time to every local action.
+  manRooms(){ if(S.dbacManned){log('DBAC rooms already manned');return;}
+    localOp(120,'Manning DBAC rooms 5-37-0-E, 6-73-0-E and 3-113-2-E (1JV)',()=>{S.dbacManned=true; log('DBAC operators on station and in comms');});},
+  askDbac(c){ const on=c.state!=='off', open=!on||!c.loaded||c.unloaderStuck;
+    localOp(S.dbacManned?20:150,`DCC to DBAC-${c.n} operator: report status`,()=>{
+      log(`DBAC-${c.n} operator: ${on?'running':'stopped'}, unloaders ${open?'OPEN':'closed'}${c.unloaderStuck&&c.loaded?' (console shows closed)':''}, ${Math.round(c.temp)}°F${c.lowOil?', low lube oil':''}${c.failing?', heavy vibration':''}`,c.unloaderStuck&&c.loaded||c.failing?'caution':'');});},
+  closeUnloader(c){ if(!c.unloaderStuck){log(`DBAC-${c.n}: unloader is working normally`);return;}
+    localOp((S.dbacManned?0:120)+60,`DBAC operator to close DBAC-${c.n} unloaders manually`,()=>{c.unloaderStuck=false; log(`DBAC-${c.n} unloaders closed manually. Discharging to the main air header`);});},
+  addOil(c){ if(!c.lowOil){log(`DBAC-${c.n}: lube oil level normal`);return;}
+    localOp((S.dbacManned?0:120)+240,`Adding lube oil to DBAC-${c.n}`,()=>{c.lowOil=false; log(`DBAC-${c.n} oil topped off and reset. Available to start`);});},
+  takeRapid(){ if(!S.wdControl){log('DCC already has the rapid ballast tanks');return;}
+    if(!S.dccPower&&!S.localCtl){log('No power to DCC ballast section','caution');return;}
+    S.wdControl=false; log('DCC has taken control of the rapid ballast tanks');},
+  // standby fire pumps are started by the DC men, not the ballast watch (user)
+  firePump(){ if(S.firemain&&!S.fmCas){log('Firemain already pressurized');return;}
+    localOp(90,'Ballast control to DC Central: request standby fire pump',()=>{S.firemain=true; S.fmCas=false; log('DC: standby fire pump on line, firemain pressure restored');});},
+  notifyER(){ if(S.condAirbound){localOp(90,'Engine room venting condensers and sea suction pumps',()=>{S.condAirbound=false; S.erNotified=true; log('Engine room: condensers vented, vacuum restored');});}
+    else {S.erNotified=true; log('Engine room notified: venting condensers and pumps on sea suction before the blow');}},
+  localCtl(){ if(S.dccPower){log('DCC ballast section has power');return;} if(S.allPowerLost){log('No power: ballast operations halted','caution');return;}
+    localOp(120,'Manning the HPUs and compressor rooms for local control (1JV/6JV)',()=>{S.localCtl=true; log('Local control established: valves worked at the HPUs on DCC orders (slower)');});},
+  restorePower(){ if(S.dccPower&&S.wdPanelPower&&!S.allPowerLost){log('Ballast control power is normal');return;}
+    localOp(300,'Electrical casualty team restoring ballast control power',()=>{
+      const all=S.allPowerLost; S.dccPower=true; S.wdPanelPower=true; S.localCtl=false; S.allPowerLost=false; if(all&&!S.fmCas) S.firemain=true;
+      log(all?'Power restored. Sea valves are shut; restart DBACs and re-establish the lineup':'Ballast control power restored');});},
+};
+function procErr(msg){ S.procErrs.push({t:S.t,msg}); log('PROCEDURE: '+msg,'caution'); }
+// DBAC console commands: start / stop / load (close unloaders) / unload (open unloaders)
+function dbacCmd(c,a){
+  if(!S.dccPower&&!S.localCtl){log('No power to DCC ballast section: DBACs cannot be controlled remotely. Establish local control.','caution');return;}
+  if(S.allPowerLost){log('No power: DBACs cannot be started','caution');return;}
+  if(a==='start'&&c.failed){log(`DBAC-${c.n} out of service. Start another unit`,'caution');return;}
+  if(a==='start'&&c.lowOil){log(`DBAC-${c.n} tripped on low lube oil. Add oil and reset, or start another unit`,'caution');return;}
+  if(a==='start'&&c.state==='off'){
+    if(!S.dbacManned) procErr(`DBAC-${c.n} started without operators on station and in comms`);
+    c.state='starting';c.tm=0;c.loaded=false;c.unloadT=S.t;log(`DBAC-${c.n} start, unloaders open`);}
+  if(a==='stop'&&c.state!=='off'){
+    // securing rule (user): at or below 100°F it can be shut down; above 100°F (e.g. 150-200°F) open the
+    // unloaders and let it run unloaded until below 100°F, then stop
+    let bad='';
+    if(c.temp>100.5) bad=c.loaded?`DBAC-${c.n} stopped loaded at ${Math.round(c.temp)}°F. Open unloaders and run it until below 100°F`
+                                 :`DBAC-${c.n} stopped at ${Math.round(c.temp)}°F. Let it run unloaded until below 100°F`;
+    if(bad) procErr(bad);
+    if(c.failing){ c.failing=false; c.failed=true;
+      log(bad?`DBAC-${c.n} damaged: stopped before it was unloaded and cooled. Out of service`:`DBAC-${c.n} secured correctly after high vibration. Out of service for inspection`,bad?'alarm':''); }
+    c.state='off';c.loaded=false;log(`DBAC-${c.n} stopped`);}
+  if(a==='load'){ if(c.state==='running'){if(!c.loaded){c.loaded=true;c.loadT=S.t;log(`DBAC-${c.n} unloaders closed: discharging to main air header`);}} else {log(`DBAC-${c.n} unloader interlock: compressor not at speed`,'caution');}}
+  if(a==='unload'&&c.loaded){c.loaded=false;c.unloadT=S.t;log(`DBAC-${c.n} unloaders open: discharging to atmosphere`);}
+}
+
+/* ============== UI ============== */
+const $=s=>document.querySelector(s);
+const el=(tag,attrs={},html='')=>{const e=document.createElement(tag);for(const k in attrs){if(k==='class')e.className=attrs[k];else e.setAttribute(k,attrs[k]);}if(html)e.innerHTML=html;return e;};
+const fmt=(v,d=1)=>v.toFixed(d);
+const ftin=v=>{let f=Math.floor(v),i=Math.round((v-f)*12);if(i===12){f++;i=0;}return `${f}′ ${String(i).padStart(2,' ')}″`;};
+const hms=s=>{s=Math.floor(s);return [s/3600|0,(s%3600)/60|0,s%60].map(n=>String(n).padStart(2,'0')).join(':');};
+let speed=10, dirtyLog=true;
+let MODE='solo';   // 'solo' | 'trainee' (runs the sim) | 'instructor' (mirrors the trainee, sends commands)
+
+// speed / gate / reset
+function setSpeed(s){speed=s;document.querySelectorAll('#speed button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.s===s)));}
+$('#speed').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return; if(MODE==='instructor') sendCmd({op:'speed',s:+b.dataset.s}); else setSpeed(+b.dataset.s);});
+const craftMsg=m=>{$('#craftMsg').textContent=m;};
+$('#gateSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  const g=b.dataset.g, c=S.craft;
+  if(g==='stop'){S.gateTgt=S.gateAng;log(`Stern gate stopped at ${Math.round(S.gateAng)}°`);return;}
+  const tgt=+g;
+  if(c&&(c.state==='entering'||c.state==='launching')&&tgt<85){craftMsg(`Gate interlock: ${c.type} is moving through the stern gate.`);return;}
+  if(c&&c.x+CRAFT[c.type].L>LWL&&tgt<85){craftMsg(`Gate interlock: ${c.type} is still over the gate.`);return;}
+  S.gateTgt=tgt; log(`Stern gate: ${tgt===0?'close':tgt>=GATE_FULL?'lower to full down':'lower to '+tgt+'°'}`);
+  // prestage check (user's practice): wing walls 25-50% on both sides before flooding the well
+  if(tgt>0&&S.prestage==null&&S.hg<.05){
+    const w=S.tanks.filter(t=>t.g==='wing'), fr=w.map(t=>t.V/t.cap);
+    const low=w.filter((t,i)=>fr[i]<.2), high=w.filter((t,i)=>fr[i]>.55);
+    S.prestage=low.length===0&&high.length===0;
+    S.prestageNote=S.prestage?'Wing walls prestaged 25–50%':`${low.length} wing wall${low.length===1?'':'s'} too low, ${high.length} too high`;
+    log(`Prestage check: ${S.prestageNote}`,S.prestage?'':'caution');
+  }
+});
+// instructor settings go through sendCmd: applied here in Solo, sent to the trainee from the instructor screen
+{const r=$('#gapTune'), rd=$('#gapRead'); r.value=TUNE.gap; rd.textContent=`Cd ${TUNE.gap.toFixed(2)}`;
+ r.addEventListener('input',()=>{rd.textContent=`Cd ${(+r.value).toFixed(2)}`;});
+ r.addEventListener('change',()=>sendCmd({op:'gap',v:+r.value}));}
+{const sel=$('#listTend'); sel.value=TUNE.list; sel.addEventListener('change',()=>sendCmd({op:'list',v:sel.value}));}
+{const sel=$('#vehSel'); sel.value=TUNE.veh; sel.addEventListener('change',()=>sendCmd({op:'veh',v:sel.value}));}
+// apply one instructor command (validated: on the trainee screen it arrives from another viewer)
+function applyCmd(o){
+  if(!o||typeof o!=='object') return;
+  const opt=(id,v)=>{const s=$(id); if(s&&[...s.options].some(x=>x.value===v)) return true; return false;};
+  switch(o.op){
+    case 'gap': { const v=+o.v; if(!(v>=.05&&v<=.6)) return; TUNE.gap=v; try{localStorage.setItem('lhdbt-gap',String(v));}catch(_){}
+      $('#gapTune').value=v; $('#gapRead').textContent=`Cd ${v.toFixed(2)}`; log(`45° gate flow set to Cd ${v.toFixed(2)}`); break; }
+    case 'list': { if(!opt('#listTend',o.v)) return; TUNE.list=o.v; $('#listTend').value=o.v; try{localStorage.setItem('lhdbt-list',o.v);}catch(_){}
+      rollList(); log('Instructor: list tendency set'); break; }
+    case 'veh': { if(!opt('#vehSel',o.v)) return; TUNE.veh=o.v; $('#vehSel').value=o.v; try{localStorage.setItem('lhdbt-veh',o.v);}catch(_){}
+      const vs=o.v==='random'?(Math.random()<.5?'port':'stbd'):o.v; S.vehSide=vs; S.vehY=vs==='stbd'?VEH.y:vs==='port'?-VEH.y:0;
+      log(o.v==='none'?'Vehicles cleared from the well':'Vehicles staged in the well'); break; }
+    case 'tli': { if(!opt('#tliChronic',o.v)) return; TUNE.tliChronic=o.v; $('#tliChronic').value=o.v; try{localStorage.setItem('lhdbt-tlichronic',o.v);}catch(_){}
+      applyChronicTLI(); log(o.v?'Instructor: chronic bad TLI set':'Instructor: chronic bad TLI cleared'); break; }
+    case 'hide': S.casHide=!!o.on; $('#casHide').checked=S.casHide; break;
+    case 'auto': $('#casAuto').checked=!!o.on;
+      if(o.on){S.casAuto={at:S.t+180+Math.random()*540}; if(MODE!=='trainee') log('Instructor: random casualty armed');} else S.casAuto=null; break;
+    case 'inject': { if(!CAS[o.key]||CAS[o.key].auto) return; const r=injectCas(o.key,!!o.hidden);
+      if(!r) log('Casualty not applicable right now','caution'); else if(o.hidden&&MODE!=='trainee') log('Instructor: casualty injected'); break; }
+    case 'reveal': { const r=S.cas[o.i|0]; if(r) r.hidden=false; break; }
+    case 'speed': if([0,1,10,30,60].includes(o.s)) setSpeed(o.s); break;
+    case 'reset': resetAll(); break;
+  }
+}
+
+// inclinometer: pendulum on a 0-15° scale each side, drawn 4x expanded for readability
+const INC={cx:150,cy:14,R:138,k:4};
+function buildIncl(){
+  const s=$('#incl'), {cx,cy,R,k}=INC;
+  const pt=(deg,r)=>{const a=deg*k*Math.PI/180;return [cx+r*Math.sin(a),cy+r*Math.cos(a)];};
+  const arc=(d0,d1,r,col,w)=>{const [x0,y0]=pt(d0,r),[x1,y1]=pt(d1,r);return `<path d="M${x0},${y0} A${r},${r} 0 0 0 ${x1},${y1}" fill="none" stroke="${col}" stroke-width="${w}"/>`;};
+  let h=`<path d="M${pt(-15.8,R+8).join(',')} A${R+8},${R+8} 0 0 0 ${pt(15.8,R+8).join(',')} L${pt(15.8,R-34).join(',')} A${R-34},${R-34} 0 0 1 ${pt(-15.8,R-34).join(',')} Z" fill="var(--plate)" stroke="var(--edge)"/>`;
+  // bands are symmetric; tick weights thicker for readability at overlay size
+  h+=arc(-1,1,R-4,'var(--ok)',6)+arc(1,3,R-4,'var(--caution)',6)+arc(-3,-1,R-4,'var(--caution)',6)+arc(3,15,R-4,'var(--alarm)',6)+arc(-15,-3,R-4,'var(--alarm)',6);
+  for(let d=-15;d<=15;d++){const maj=d%5===0,[x0,y0]=pt(d,R-8),[x1,y1]=pt(d,R-(maj?24:16));
+    h+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="var(--ink)" stroke-width="${maj?3:1.6}"/>`;
+    if(maj&&d!==0){const [tx,ty]=pt(d,R-34);h+=`<text x="${tx}" y="${ty+5}" text-anchor="middle" font-size="16" font-weight="600" font-family="IBM Plex Mono,monospace" fill="var(--ink-2)">${Math.abs(d)}</text>`;}}
+  // mounted in the well deck control room facing aft: starboard is on the left
+  h+=`<text x="10" y="30" font-size="22" font-weight="700" letter-spacing=".08em" font-family="Barlow Condensed,Arial Narrow,sans-serif" fill="var(--ink-2)">STBD</text>`;
+  h+=`<text x="290" y="30" text-anchor="end" font-size="22" font-weight="700" letter-spacing=".08em" font-family="Barlow Condensed,Arial Narrow,sans-serif" fill="var(--ink-2)">PORT</text>`;
+  h+=`<g class="needle" id="inclNeedle"><line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy+R-6}" stroke="var(--alarm)" stroke-width="3.5"/><circle cx="${cx}" cy="${cy+R-40}" r="9" fill="var(--ink)"/></g>`;
+  h+=`<circle cx="${cx}" cy="${cy}" r="5" fill="var(--ink)"/>`;
+  s.innerHTML=h;
+}
+function updateIncl(){
+  const n=$('#inclNeedle'); if(!n) return;
+  const L=Math.max(-16,Math.min(16,S.list)), a=L*INC.k;          // facing aft: stbd list swings the needle left, onto the stbd scale
+  n.setAttribute('transform',`rotate(${a} ${INC.cx} ${INC.cy})`);
+  const la=Math.abs(S.list); $('#inclV').textContent=fmt(la,1)+'°';
+  $('#inclS').textContent=la<.05?'upright':S.list>0?'starboard':'port';
+  $('#inclV').parentElement.className='inclread'+(la>3?' crit':la>1?' warn':'');
+}
+buildIncl();
+
+let lcuLoad='loaded';
+$('#lcuLoad').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;lcuLoad=b.dataset.l;
+  document.querySelectorAll('#lcuLoad button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+  const L=CRAFT.LCU.loads[lcuLoad]; craftMsg(`LCU ${lcuLoad}: draft about ${L.draft} ft, needs ${L.need} ft of water.`);});
+function bringCraft(type){
+  const spec=CRAFT[type];
+  if(S.craft){craftMsg(`The ${S.craft.type} is already in or at the well. Launch it first.`);return;}
+  if(S.gateAng<85){craftMsg(`Stern gate must be full down before the ${type} can enter.`);return;}
+  const slope=Math.max((S.Ta-S.Tf)/LWL,1e-4);
+  let park=WELL_X0+18, draft=0;
+  if(type==='LCU'){
+    const L=spec.loads[lcuLoad]; draft=L.draft;
+    if(S.hg<L.need){craftMsg(`Not enough water for a ${lcuLoad} LCU: ${fmt(S.hg,1)} ft at the gate, needs ${L.need} ft.`);return;}
+    const xok=LWL-(S.hg-(draft+.5))/slope; park=Math.max(park,xok);
+    if(park+spec.L>LWL+20){craftMsg('Not enough length of deep water for the LCU. Ballast down further.');return;}
+  } else if(S.hg>spec.maxWater){craftMsg(`LCAC needs a dry well: ${fmt(S.hg,1)} ft in the well, ${spec.maxWater} ft max. Deballast first.`);return;}
+  S.craft={type,x:LWL+260,park,draft,load:type==='LCU'?lcuLoad:null,state:'entering',aground:false,wet:false};
+  log(`${type}${type==='LCU'?' ('+lcuLoad+')':''} approaching the stern`); craftMsg(`${type} inbound.`);
+}
+$('#bringLCU').addEventListener('click',()=>bringCraft('LCU'));
+$('#bringLCAC').addEventListener('click',()=>bringCraft('LCAC'));
+$('#launch').addEventListener('click',()=>{const c=S.craft;
+  if(!c||c.state!=='docked'){craftMsg('No craft secured in the well.');return;}
+  if(S.gateAng<85){craftMsg('Lower the stern gate full down to launch.');return;}
+  if(c.type==='LCU'&&c.aground){craftMsg('LCU is aground. Add water to the well to float it before launching.');return;}
+  if(c.type==='LCU'&&S.hg<CRAFT.LCU.loads[c.load].need){craftMsg(`Need ${CRAFT.LCU.loads[c.load].need} ft at the gate to launch a ${c.load} LCU; have ${fmt(S.hg,1)} ft.`);return;}
+  c.state='launching'; log(`${c.type} launching`); craftMsg(`${c.type} backing out.`);
+});
+function resetAll(){init();buildPanes();CALL.L=null;CALL.msg='';RAMP.prev=null;$('#casAuto').checked=false;log('Simulation reset: normal condition 27′ fwd / 28′ aft');}
+$('#resetBtn').addEventListener('click',()=>{ if(MODE==='instructor') sendCmd({op:'reset'}); else resetAll(); });
+
+// tabs
+// ---- casualty control pane (static markup; wire once) ----
+{
+  $('#casSel').innerHTML=Object.entries(CAS).filter(([,c])=>!c.auto).map(([k,c])=>`<option value="${k}">${c.name}</option>`).join('');
+  $('#actTank').innerHTML=DEF.map(d=>`<option value="${d.id}">${d.id}</option>`).join('');
+  $('#actHcs').innerHTML=HCS.map(h=>`<option value="${h.id}">${h.id} · ${h.name}</option>`).join('');
+  $('#tliChronic').innerHTML='<option value="">None</option><option value="random">Random tank each run</option>'+
+    DEF.filter(d=>d.blowT).map(d=>`<option value="${d.id}">${d.id}${d.id==='7-109-0-W'?' (the LHD-5 problem TLI)':''}</option>`).join('');
+  $('#tliChronic').value=TUNE.tliChronic;
+  $('#tliChronic').addEventListener('change',e=>sendCmd({op:'tli',v:e.target.value}));
+  $('#actDbac').innerHTML=[1,2,3,4,5,6].map(n=>`<option value="${n}">DBAC-${n}</option>`).join('');
+  $('#casHide').addEventListener('change',e=>sendCmd({op:'hide',on:e.target.checked}));
+  $('#casAuto').addEventListener('change',e=>sendCmd({op:'auto',on:e.target.checked}));
+  $('#casInject').addEventListener('click',()=>sendCmd({op:'inject',key:$('#casSel').value,hidden:$('#casHide').checked}));
+  $('#pane-cas').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    if(b.dataset.reveal!=null){sendCmd({op:'reveal',i:+b.dataset.reveal}); return;}
+    const a=b.dataset.act; if(!a) return;
+    const t=S.byId[$('#actTank').value], h=S.hcs.find(x=>x.id===$('#actHcs').value), c=S.dbac[+$('#actDbac').value-1];
+    if(['sound','reportTLI','vickers','handPump','isoFM'].includes(a)) ACT[a](t);
+    else if(a==='xconn') ACT.xconn(h);
+    else if(['askDbac','closeUnloader','addOil'].includes(a)) ACT[a](c);
+    else if(a==='isoHdrP') ACT.isoHdr('port'); else if(a==='isoHdrS') ACT.isoHdr('stbd');
+    else if(ACT[a]) ACT[a]();
+  });
+}
+function renderCas(){
+  const ul=$('#casList'); if(!ul) return;
+  const pe=$('#procErrs'); if(pe) pe.innerHTML=S.procErrs.length?`<b>Procedure errors: ${S.procErrs.length}</b> · ${S.procErrs.slice(-3).map(p=>p.msg).join(' · ')}`:'Procedure errors: none';
+  if(!S.cas.length){ul.innerHTML='<li class="note">No casualties. Inject one above, or arm a random casualty.</li>'; return;}
+  ul.innerHTML=S.cas.map((r,i)=>{
+    const done=r.tClr!=null, el=(done?r.tClr:S.t)-r.t0, hid=r.hidden&&!done, ins=MODE==='instructor', mask=hid&&!ins;
+    return `<li><span class="chip ${done?'ok':'alarm'}">${done?'Controlled':'Active'}</span><span>${mask?`Casualty ${i+1} (hidden)`:r.name+(r.target?' · '+r.target:'')+(hid&&ins?' (hidden from trainee)':'')}</span>
+      ${hid&&MODE!=='trainee'?`<button class="tbtn" data-reveal="${i}">Reveal</button>`:''}<span class="tm">${done?'controlled in ':''}${hms(el).slice(3)}</span></li>`;}).join('');
+}
+const tabs=['wd','dcc','air','cas'];
+document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('[role=tab]');if(!b)return;const id=b.id.slice(4);
+  tabs.forEach(k=>{$('#tab-'+k).setAttribute('aria-selected',String(k===id));$('#pane-'+k).hidden=k!==id;});
+  try{localStorage.setItem('lhdbt-tab',id);}catch(_){}});
+
+const WD_ORDER=['7-125-0-W','7-117-0-W','7-113-0-W','7-109-0-W','7-105-0-W','7-25-0-W'];
+const MODE_ROWS=[['DEBLST','DEBLST'],['PRE','PRE<br>DEBLST'],['NORMAL','NORMAL'],['BALLAST','BALLAST']];
+const refs={};
+function lampPair(key,lbl){return `<span class="lamp" data-l="${key}:0">CLOS</span><span class="lamp" data-l="${key}:1">OPEN</span>`;}
+
+function buildPanes(){
+  // ---------- Well deck panel ----------
+  const wd=$('#pane-wd'); wd.innerHTML='';
+  const p=el('div',{class:'wdp'+(showLevels?'':' hide-levels'),id:'wdp'});
+  const cols=el('div',{class:'wdp-cols'});
+  for(const id of WD_ORDER){
+    const c=el('div',{class:'wcol','data-t':id});
+    c.innerHTML=`
+      <div class="ilbl">Sea / blow</div>
+      <div class="ibox">${lampPair('sea')}${lampPair('blow')}</div>
+      <div class="ilbl">Vent</div>
+      <div class="ibox">${lampPair('vent')}<span class="lamp full" data-l="rpd">RPD BLST</span></div>
+      <div class="plate"><span class="lvl"></span><span class="pct"></span><span class="name">${id}</span></div>
+      ${MODE_ROWS.map(([m,l])=>`<button class="pb" data-m="${m}" id="wd-${id}-${m}">${l}</button>`).join('')}`;
+    cols.append(c);
+  }
+  const side=el('div',{class:'wside'});
+  side.innerHTML=`
+    <div class="ctlbox"><button class="pb wide" id="wdPower">POWER<br>ON</button><span>WELL DECK CONTROL</span></div>
+    <div class="gauges" aria-label="Draft system">
+      ${['AFT','WELL DECK','FWD'].map((g,i)=>`<div class="gauge"><span class="gl">${g}</span><svg viewBox="0 0 44 170" id="g${i}"></svg><span class="gv" id="gv${i}"></span></div>`).join('')}
+    </div>
+    <div class="ctlbox"><button class="pb wide" id="lampTest">TEST</button><span>LAMP TEST</span></div>
+    <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="lvlToggle" ${showLevels?'checked':''}> Show tank levels (training aid; not on the real panel)</label>`;
+  p.append(cols,side); wd.append(p);
+  wd.append(el('p',{class:'lockmsg',id:'wdLock'},'Panel is in standby. Press POWER ON to take well deck control of the rapid ballast tanks.'));
+  drawGaugeScales();
+  cols.addEventListener('click',e=>{const b=e.target.closest('button[data-m]');if(!b)return;
+    if(!S.wdPanelPower){log('Well deck ballast panel has no power','caution');return;}
+    if(!S.wdControl){flash('#wdLock');return;}
+    setMode(S.byId[b.closest('.wcol').dataset.t],b.dataset.m);});
+  $('#wdPower').addEventListener('click',()=>{ if(!S.wdPanelPower){log('Well deck ballast panel has no power','caution');return;} S.wdControl=!S.wdControl;log(S.wdControl?'Well deck panel has control of rapid ballast tanks':'Rapid ballast control returned to DCC');});
+  $('#lampTest').addEventListener('click',()=>{p.classList.add('lamptest');setTimeout(()=>p.classList.remove('lamptest'),1800);});
+  $('#lvlToggle').addEventListener('change',e=>{showLevels=e.target.checked;p.classList.toggle('hide-levels',!showLevels);try{localStorage.setItem('lhdbt-lvl',showLevels?'1':'0');}catch(_){}});
+
+  // ---------- DCC ----------
+  const dccPane=$('#pane-dcc'); dccPane.innerHTML=''; const dcc=el('div'); dccPane.append(dcc);
+  const groups=[
+    ['fwd','Forward trim tanks','Sea flood + firemain topping · air blow'],
+    ['rapid','Rapid ballast tanks','24-in sea valves · ~15 min fill · air blow'],
+    ['aft','Aft tanks','7-102 prestage · aft side tanks'],
+    ['wing','Wing wall tanks · list control','Firemain fill 323 gpm · gravity drain'],
+  ];
+  const fmBar=el('div',{class:'hdr'});
+  fmBar.innerHTML=`<span class="lamp grn" id="fmLamp">FIREMAIN</span><button class="pb wide" id="fmBtn">Firemain pressurized</button><span class="note">Needed for topping and wing wall fill.</span>`;
+  dcc.append(fmBar);
+  for(const [g,name,sub] of groups){
+    const gr=el('div',{class:'grp'}); gr.innerHTML=`<h3>${name}<small>${sub}</small></h3>`;
+    if(g==='rapid') gr.append(el('p',{class:'lockmsg',id:'dccLock'},'Well deck panel has control. Rapid tank buttons here are locked out. <button class="pb wide" id="dccTake">Take control at DCC</button>'));
+    for(const t of S.tanks.filter(t=>t.g===g)){
+      const r=el('div',{class:'trow','data-t':t.id});
+      const side=t.tcg>0?'stbd':t.tcg<0?'port':'CL';
+      let ctl='';
+      if(t.blowT){
+        ctl+=`<span class="lamps"><span class="lamp" data-l="sea:1">SEA</span><span class="lamp" data-l="vent:1">VENT</span><span class="lamp" data-l="blow:1">BLOW</span></span><span class="sep"></span>`;
+        ctl+=MODE_ROWS.map(([m])=>`<button class="pb" data-m="${m}">${m==='PRE'?'PRE DB':m==='DEBLST'?'DEBLST':m==='BALLAST'?'BLST':'NORM'}</button>`).join('');
+      }
+      if(t.fm) ctl+=`<span class="sep"></span><button class="pb" data-v="fm">FM TOP</button>`;
+      if(t.drain) ctl+=`<button class="pb" data-v="drain">DRAIN</button>`;
+      r.innerHTML=`<div class="id">${t.id}<small>${side} · ${t.cap.toLocaleString()} ft³</small></div>
+        <div class="tli"><div class="bar"><i></i></div><div class="t"></div></div>
+        <div class="ctl">${ctl}</div>`;
+      gr.append(r);
+    }
+    dcc.append(gr);
+  }
+  dcc.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+    if(b.id==='dccTake'){ACT.takeRapid();return;}
+    if(b.id==='fmBtn'){ if(S.fmCas){log('Firemain casualty in progress: use Casualty actions to start the standby fire pump','caution');return;}
+      S.firemain=!S.firemain;log(`Firemain ${S.firemain?'restored':'lost'} to ballast topping`,S.firemain?'':'caution');return;}
+    const row=b.closest('.trow'); if(!row) return; const t=S.byId[row.dataset.t];
+    if(!S.dccPower&&!S.localCtl){log('No power to DCC ballast section: remote control lost. Use the well deck panel or establish local control.','caution');return;}
+    if(t.g==='rapid'&&S.wdControl){flash('#dccLock');return;}
+    if(b.dataset.m) setMode(t,b.dataset.m);
+    if(b.dataset.v) toggleValve(t,b.dataset.v,b.dataset.v==='fm'?'firemain topping':'gravity drain');
+  });
+
+  // ---------- Air ----------
+  const air=$('#pane-air'); air.innerHTML='';
+  const rooms=[['Fwd machinery room','5-37-0-E',[1,2]],['Aux machinery / deballast compr. rm','6-73-0-E',[3,4]],['Deballast compressor room','3-113-2-E',[5,6]]];
+  const rw=el('div',{class:'rooms'});
+  for(const [nm,loc,ns] of rooms){
+    const r=el('div',{class:'room'}); r.innerHTML=`<h4>${nm}<br><span style="font-family:var(--font-mono);font-weight:400">${loc}</span></h4>`;
+    for(const n of ns){
+      const d=el('div',{class:'dbac','data-n':n});
+      d.innerHTML=`<span class="nm">DBAC-${n}</span><span class="ps" data-ps>0.0 psig</span>
+        <div class="btns"><span class="lamp grn" data-run>RUN</span><span class="lamp" data-uo>UNLDR OPEN</span><span class="lamp" data-uc>UNLDR CLOSED</span></div>
+        <div class="btns"><button class="pb" data-a="start">START</button><button class="pb" data-a="stop">STOP</button><button class="pb" data-a="load">CLOSE UNLDRS</button><button class="pb" data-a="unload">OPEN UNLDRS</button></div>`;
+      r.append(d);
+    }
+    rw.append(r);
+  }
+  air.append(rw);
+  const hdr=el('div',{class:'hdr'});
+  hdr.innerHTML=`<div><div class="note">Main air header</div><div class="big" id="hdrP">0.0 psig</div></div><span class="lamp red" id="reliefLamp">RELIEF LIFTING</span>
+   <span class="lamp grn" id="mannedLamp">ROOMS MANNED</span><button class="pb wide" id="manRooms">Man DBAC rooms (1JV)</button>
+   <span class="note" style="flex:1;min-width:200px">2,160 cfm each at 20 psig, about 300°F loaded. Start with unloaders open; close them once at speed. To secure: at or below 100°F, stop it. Above 100°F, open unloaders and let it run unloaded until below 100°F, then stop. Console unloader lamps show what was commanded, not always what the valve did. Keep operators on station and in comms.</span>`;
+  air.append(hdr);
+  rw.addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;
+    dbacCmd(S.dbac[b.closest('.dbac').dataset.n-1],b.dataset.a);});
+  $('#manRooms').addEventListener('click',()=>ACT.manRooms());
+
+  refs.cache=null;
+}
+let showLevels=true; try{showLevels=localStorage.getItem('lhdbt-lvl')!=='0';}catch(_){}
+function flash(sel){const e=$(sel);if(!e)return;e.animate?.([{opacity:1},{opacity:.2},{opacity:1}],{duration:500});}
+
+// gauges
+const GRANGE=[[15,40],[0,12],[15,40]];
+function drawGaugeScales(){
+  GRANGE.forEach(([a,b],i)=>{
+    const s=$('#g'+i); let h=`<rect x="14" y="8" width="12" height="154" fill="var(--lamp-off)" rx="2"/><rect id="gf${i}" x="16" y="160" width="8" height="0" fill="var(--sea)"/>`;
+    const step=i===1?2:5;
+    for(let v=a;v<=b;v+=step){const y=160-(v-a)/(b-a)*150;h+=`<line x1="27" x2="33" y1="${y}" y2="${y}" stroke="var(--ink-2)"/><text x="35" y="${y+3}" font-size="8" fill="var(--ink-2)" font-family="IBM Plex Mono,monospace">${v}</text>`;}
+    h+=`<polygon id="gp${i}" points="6,0 13,4 6,8" fill="var(--alarm)"/>`;
+    s.innerHTML=h;
+  });
+}
+
+/* ---- profile SVG ---- */
+const PX=x=>30+(x+32)*(940/815), PZ=z=>250-z*2.6;
+const NS='http://www.w3.org/2000/svg';
+let prof={};
+function buildProfile(){
+  const s=$('#prof'); s.innerHTML='';
+  const add=(tag,a)=>{const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);s.append(e);return e;};
+  add('rect',{x:0,y:0,width:1000,height:285,fill:'var(--sky)'});
+  prof.sea=add('polygon',{fill:'var(--sea-deep)',opacity:.55});
+  // hull
+  const pts=[[-30,62],[-16,42],[-30,16],[-24,5],[-10,0],[600,0]];
+  for(let x=620;x<=LWL;x+=20) pts.push([x,keelAt(x)]);
+  pts.push([LWL,keelAt(LWL)],[LWL,62]);
+  add('polygon',{points:pts.map(([x,z])=>`${PX(x)},${PZ(z)}`).join(' '),fill:'var(--hull)',stroke:'var(--hull-line)','stroke-width':1.5});
+  // decks
+  add('line',{x1:PX(-30),x2:PX(LWL),y1:PZ(62),y2:PZ(62),stroke:'var(--hull-line)','stroke-width':2});
+  add('text',{x:PX(-24),y:PZ(62)-6,'font-size':11,fill:'var(--ink-2)','font-family':'Barlow Condensed,Arial Narrow,sans-serif','letter-spacing':'.06em'}).textContent='MAIN DECK';
+  // well deck
+  add('rect',{x:PX(WELL_X0),y:PZ(57),width:PX(LWL)-PX(WELL_X0),height:PZ(WELL_FLOOR)-PZ(57),fill:'var(--tank)',stroke:'var(--tank-line)','stroke-dasharray':'5 3'});
+  prof.well=add('polygon',{fill:'var(--sea)',opacity:.75});
+  add('text',{x:PX(WELL_X0)+8,y:PZ(57)+14,'font-size':12,fill:'var(--ink-2)','font-family':'Barlow Condensed,Arial Narrow,sans-serif','letter-spacing':'.08em'}).textContent='WELL DECK';
+  // 28 ft DWL reference
+  add('line',{x1:PX(-30),x2:PX(LWL),y1:PZ(28),y2:PZ(28),stroke:'var(--ink-3)','stroke-dasharray':'2 4'});
+  add('text',{x:PX(250),y:PZ(28)-4,'font-size':10,fill:'var(--ink-3)','font-family':'IBM Plex Mono,monospace'}).textContent='28 ft DWL';
+  // tanks
+  prof.tanks=[];
+  const pairs={};
+  for(const t of S.tanks){
+    let x0=t.x0,x1=t.x1;
+    if(t.tcg){const mid=(x0+x1)/2; if(t.tcg<0) x1=mid; else x0=mid;} // port fwd half, stbd aft half
+    const r=add('rect',{x:PX(x0)+.5,y:PZ(t.zt),width:PX(x1)-PX(x0)-1,height:PZ(t.zb)-PZ(t.zt),fill:'var(--tank)',stroke:'var(--tank-line)','stroke-width':1});
+    const w=add('rect',{x:PX(x0)+1,width:Math.max(0,PX(x1)-PX(x0)-2),fill:'var(--sea)',opacity:.85});
+    prof.tanks.push({t,w,r});
+  }
+  // labels for groups
+  const lbl=(x,z,txt)=>{const e=add('text',{x:PX(x),y:PZ(z),'font-size':11,fill:'var(--ink-2)','font-family':'Barlow Condensed,Arial Narrow,sans-serif','text-anchor':'middle','letter-spacing':'.05em'});e.textContent=txt;};
+  lbl(80,48,'FWD TRIM'); lbl(665,54,'WING WALLS (P|S)'); lbl(680,-4,'RAPID BALLAST'); lbl(87,-4,'7-25');
+  // gate
+  prof.gate=add('line',{stroke:'var(--ink)','stroke-width':4,'stroke-linecap':'round'});
+  // waterline + drafts
+  prof.wl=add('line',{stroke:'var(--sea)','stroke-width':2});
+  prof.tf=add('text',{'font-size':13,fill:'var(--ink)','font-family':'IBM Plex Mono,monospace','font-weight':600});
+  prof.ta=add('text',{'font-size':13,fill:'var(--ink)','font-family':'IBM Plex Mono,monospace','font-weight':600,'text-anchor':'end'});
+}
+function updateProfile(){
+  const T=x=>S.Tf+(S.Ta-S.Tf)*x/LWL;
+  const xa=-32,xb=790;
+  prof.sea.setAttribute('points',`${PX(xa)},${PZ(T(xa))} ${PX(xb)},${PZ(T(xb))} ${PX(xb)},285 ${PX(xa)},285`);
+  prof.wl.setAttribute('x1',PX(xa));prof.wl.setAttribute('y1',PZ(T(xa)));prof.wl.setAttribute('x2',PX(xb));prof.wl.setAttribute('y2',PZ(T(xb)));
+  for(const {t,w} of prof.tanks){const h=t.V/t.cap*(t.zt-t.zb);w.setAttribute('y',PZ(t.zb+h));w.setAttribute('height',Math.max(0,PZ(t.zb)-PZ(t.zb+h)));}
+  // well water
+  if(S.hg>.02){
+    const s=Math.max((S.Ta-S.Tf)/LWL,1e-4), wz=x=>WELL_FLOOR+S.hg-s*(LWL-x);
+    const x0=Math.min(Math.max(LWL-S.hg/s,WELL_X0),LWL), pts=[`${PX(x0)},${PZ(WELL_FLOOR)}`];
+    pts.push(`${PX(x0)},${PZ(Math.max(WELL_FLOOR,wz(x0)))}`,`${PX(LWL)},${PZ(wz(LWL))}`,`${PX(LWL)},${PZ(WELL_FLOOR)}`);
+    prof.well.setAttribute('points',pts.join(' '));
+  } else prof.well.setAttribute('points','');
+  {const ph=S.gateAng*Math.PI/180;
+   prof.gate.setAttribute('x1',PX(LWL));prof.gate.setAttribute('y1',PZ(WELL_FLOOR));
+   prof.gate.setAttribute('x2',PX(LWL+GATE_LEN*Math.sin(ph)));prof.gate.setAttribute('y2',PZ(WELL_FLOOR+GATE_LEN*Math.cos(ph)));}
+  prof.tf.setAttribute('x',PX(-30));prof.tf.setAttribute('y',PZ(T(-30))+18);prof.tf.textContent='F '+ftin(S.Tf);
+  prof.ta.setAttribute('x',PX(LWL)-4);prof.ta.setAttribute('y',Math.min(PZ(T(LWL))+18,280));prof.ta.textContent='A '+ftin(S.Ta);
+}
+function updateStern(){
+  const s=$('#stern'), k=2.2, cx=110, wy=110;
+  const Tg=S.Ta, zz=z=>wy-(z-Tg)*k, yy=y=>cx+y*k*.9;
+  const rot=-S.list*3;
+  const sec=`${yy(-53)},${zz(62)} ${yy(-53)},${zz(10)} ${yy(-40)},${zz(keelAt(LWL))} ${yy(40)},${zz(keelAt(LWL))} ${yy(53)},${zz(10)} ${yy(53)},${zz(62)}`;
+  const wellWater=S.hg>.02?`<rect x="${yy(-25)}" y="${zz(WELL_FLOOR+S.hg)}" width="${50*k*.9}" height="${S.hg*k}" fill="var(--sea)" opacity=".8"/>`:'';
+  let wings='';
+  for(const t of S.tanks.filter(t=>t.g==='wing'&&t.id.startsWith('4-109'))){
+    const y0=t.tcg>0?26:-52, fr=t.V/t.cap;
+    wings+=`<rect x="${yy(y0)}" y="${zz(t.zt)}" width="${26*k*.9}" height="${(t.zt-t.zb)*k}" fill="var(--tank)" stroke="var(--tank-line)"/><rect x="${yy(y0)}" y="${zz(t.zb+fr*(t.zt-t.zb))}" width="${26*k*.9}" height="${fr*(t.zt-t.zb)*k}" fill="var(--sea)"/>`;
+  }
+  s.innerHTML=`<rect width="220" height="190" fill="var(--sky)"/>
+   <rect x="0" y="${wy}" width="220" height="${190-wy}" fill="var(--sea-deep)" opacity=".55"/>
+   <g transform="rotate(${rot} ${cx} ${wy})">
+     <polygon points="${sec}" fill="var(--hull)" stroke="var(--hull-line)" stroke-width="1.5"/>
+     <rect x="${yy(-25)}" y="${zz(57)}" width="${50*k*.9}" height="${(57-WELL_FLOOR)*k}" fill="var(--tank)" stroke="var(--tank-line)" stroke-dasharray="4 3"/>
+     ${wellWater}${wings}
+   </g>
+   <line x1="0" x2="220" y1="${wy}" y2="${wy}" stroke="var(--sea)" stroke-width="2"/>
+   <text x="6" y="16" font-size="11" fill="var(--ink-2)" font-family="Barlow Condensed,Arial Narrow,sans-serif" letter-spacing=".06em">PORT</text>
+   <text x="214" y="16" font-size="11" fill="var(--ink-2)" font-family="Barlow Condensed,Arial Narrow,sans-serif" text-anchor="end" letter-spacing=".06em">STBD</text>`;
+}
+
+function setRO(id,v,s,cls=''){const e=$(id);e.className='ro '+cls;e.children[1].textContent=v;e.children[2].textContent=s;}
+const tli=t=>(MODE==='instructor'&&t.mirrorTli!=null)?t.mirrorTli:t.tliFail?t.tliFail.reads:t.tliChronic?t.tliJunk:t.V/t.cap;   // what the tank level indicator shows
+function lampState(pos){return pos<=.001?0:pos>=.999?1:.5;}
+function paintLamps(root,t){
+  const ventPos=t.blowT?1-t.pos.blow:1;
+  const P={sea:t.pos.sea,blow:t.pos.blow,vent:ventPos};
+  root.querySelectorAll('[data-l]').forEach(l=>{
+    const [k,want]=l.dataset.l.split(':');
+    if(k==='rpd'){l.classList.toggle('on',t.mode==='BALLAST');return;}
+    const st=lampState(P[k]);
+    l.classList.toggle('on',st===+want); l.classList.toggle('transit',st===.5);
+  });
+}
+function render(){
+  $('#clock').textContent=hms(S.t);
+  setRO('#roF',ftin(S.Tf),fmt(S.Tf,2)+' ft');
+  setRO('#roA',ftin(S.Ta),fmt(S.Ta,2)+' ft');
+  const trim=S.Ta-S.Tf; setRO('#roT',fmt(Math.abs(trim),1)+' ft',trim>=0?'by the stern':'by the head');
+  const ho=S.Ta-WELL_FLOOR;
+  setRO('#roW',S.hg>.05?fmt(S.hg,1)+' ft':'dry',`sea ${ho>=0?fmt(ho,1)+' ft over':fmt(-ho,1)+' ft below'} sill`,S.hg>=8&&S.hg<=10?'good':S.hg>11?'warn':'');
+  const ga=Math.round(S.gateAng), moving=Math.abs(S.gateTgt-S.gateAng)>.01;
+  $('#gateRead').textContent=`${ga}° ${ga===0?'closed':ga>=GATE_FULL?'full down':''}${moving?' · moving':''}`;
+  document.querySelectorAll('#gateSeg button[data-g]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.g!=='stop'&&+b.dataset.g===S.gateTgt)));
+  const la=Math.abs(S.list); setRO('#roL',fmt(la,1)+'°',la<.05?'upright':S.list>0?'to starboard':'to port',la>3?'crit':la>1?'warn':'');
+  setRO('#roG',fmt(S.gm,1)+' ft',`solid ${fmt(S.gmSolid,1)} ft`,S.gm<2?'crit':S.gm<4?'warn':'');
+  setRO('#roB',Math.round(S.bal).toLocaleString()+' LT',S.wellLT>1?`+ ${Math.round(S.wellLT).toLocaleString()} LT in well`:`${Math.round(S.bal*FT3_LT).toLocaleString()} ft³`);
+  setRO('#roD',Math.round(S.W).toLocaleString()+' LT','long tons');
+
+  // well deck panel
+  document.querySelectorAll('#pane-wd .wcol').forEach(c=>{const t=S.byId[c.dataset.t];paintLamps(c,t);
+    c.querySelectorAll('button[data-m]').forEach(b=>b.classList.toggle('lit',t.mode===b.dataset.m));
+    const fr=tli(t); c.querySelector('.lvl').style.height=(fr*100)+'%'; c.querySelector('.pct').textContent=Math.round(fr*100)+'%';});
+  const pw=$('#wdPower'); if(pw){pw.classList.toggle('lit',S.wdControl&&S.wdPanelPower); $('#wdLock').hidden=S.wdControl||!S.wdPanelPower; $('#wdp').classList.toggle('dead',!S.wdPanelPower);}
+  const gv=[S.Ta,S.wellD,S.Tf];
+  GRANGE.forEach(([a,b],i)=>{const v=Math.min(Math.max(gv[i],a),b),y=160-(v-a)/(b-a)*150;const f=$('#gf'+i);if(!f)return;f.setAttribute('y',y);f.setAttribute('height',160-y);$('#gp'+i).setAttribute('transform',`translate(0 ${y-4})`);$('#gv'+i).textContent=fmt(gv[i],1);});
+
+  // DCC
+  const lk=$('#dccLock'); if(lk) lk.hidden=!S.wdControl;
+  document.querySelectorAll('#pane-dcc .trow').forEach(r=>{const t=S.byId[r.dataset.t];
+    const dead=!S.dccPower&&!S.localCtl, fr=tli(t), bar=r.querySelector('.bar'); bar.firstElementChild.style.width=(dead?0:fr*100)+'%'; bar.classList.toggle('over',t.flags.overflow);
+    const tv=fr*t.cap;
+    r.querySelector('.t').textContent=dead?'NO INDICATION: DCC power lost':`${Math.round(fr*100)}% · ${Math.round(tv).toLocaleString()} ft³ · ${Math.round(tv/FT3_LT)} LT${t.tliReported?' · TLI UNRELIABLE':''}${(t.tliFail||t.tliChronic)&&t.sounded>0?` · SOUNDED ${Math.round(100*t.V/t.cap)}% at ${hms(t.sounded).slice(0,5)}`:''}${t.blowT&&t.Pg>.2?` · ${fmt(t.Pg,1)} psig`:''}${t.flags.drainStall?' · drain stopped: at sea level':''}`;
+    if(t.blowT) paintLamps(r,t);
+    r.querySelectorAll('button[data-m]').forEach(b=>{b.classList.toggle('lit',t.mode===b.dataset.m);b.disabled=t.g==='rapid'&&S.wdControl;});
+    r.querySelectorAll('button[data-v]').forEach(b=>b.classList.toggle('lit',t.tgt[b.dataset.v]===1));
+  });
+  const fb=$('#fmBtn'); if(fb){fb.classList.toggle('lit',S.firemain);fb.textContent=S.firemain?'Firemain pressurized':'Firemain lost';$('#fmLamp').classList.toggle('on',S.firemain);}
+
+  // air
+  document.querySelectorAll('#pane-air .dbac').forEach(d=>{const c=S.dbac[d.dataset.n-1];
+    d.querySelector('[data-run]').classList.toggle('on',c.state==='running'); d.querySelector('[data-run]').classList.toggle('transit',c.state==='starting');
+    // unloader lamps follow the command, not the valve (per user: they don't always tell the truth)
+    const on=c.state!=='off';
+    d.querySelector('[data-uo]').classList.toggle('on',on&&!c.loaded); d.querySelector('[data-uc]').classList.toggle('on',on&&c.loaded);
+    const dead=!S.dccPower&&!S.localCtl;
+    d.querySelector('[data-ps]').textContent=dead?'no ind.':c.failed?'OUT OF SERVICE':c.lowOil?'TRIPPED: LOW OIL':
+      `${c.loaded?(c.unloaderStuck?'0.4':fmt(S.Ph,1)):on?'0.4':'0.0'} psig · ${Math.round(c.temp)}°F`;
+    d.querySelector('[data-a=start]').classList.toggle('lit',c.state!=='off');
+    d.querySelector('[data-a=load]').classList.toggle('lit',c.loaded);
+  });
+  const hp=$('#hdrP'); if(hp){hp.textContent=fmt(S.Ph,1)+' psig';$('#reliefLamp').classList.toggle('on',S.relief);$('#mannedLamp').classList.toggle('on',S.dbacManned);}
+
+  updateProfile(); updateStern(); updateIncl(); renderAlarms(); renderCas();
+}
+
+function renderAlarms(){
+  const A=[];
+  const la=Math.abs(S.list);
+  if(MODE==='instructor') A.push(...(S.mirAlarms||[]));   // the trainee's alarms, as the trainee sees them
+  else {
+  if(la>3) A.push(['alarm',`List ${fmt(la,1)}° ${S.list>0?'stbd':'port'}`]); else if(la>1) A.push(['caution',`List ${fmt(la,1)}° ${S.list>0?'stbd':'port'}`]);
+  if(S.gm<2) A.push(['alarm','Low GM']); else if(S.gm<4) A.push(['caution','GM reduced']);
+  if(S.hg>11) A.push(['caution','Well depth high']);
+  if(S.craft&&S.craft.type==='LCAC'&&S.hg>CRAFT.LCAC.maxWater) A.push(['caution',`LCAC in the well with ${fmt(S.hg,1)} ft of water (1 ft max)`]);
+  if(S.gateAng>50&&S.wellQ>0&&(S.Ta-WELL_FLOOR)-S.hg>4) A.push(['caution','Surge: well flooding fast. Hold the gate at 45° until about 3 ft is in']);
+  if(S.gateAng<.5&&S.Ta-WELL_FLOOR>12) A.push(['caution','Deep water on a closed stern gate']);
+  for(const t of S.tanks){
+    if(t.flags.blowThru) A.push(['alarm',`${t.id} air blowing out sea valve`]);
+    if(t.flags.overflow) A.push(['alarm',`${t.id} overflow`]);
+    else if(t.g==='wing'&&t.tgt.fm&&t.V/t.cap>.95) A.push(['caution',`${t.id} near full: secure firemain topping`]);
+    if(t.flags.backflood) A.push(['caution',`${t.id} flooding in on DEBLST: tank not pressurized`]);
+  }
+  if(S.relief) A.push(['caution','DBAC relief lifting']);
+  // casualty symptoms (what the operator would actually see)
+  if(!S.dccPower) A.push(['alarm',S.localCtl?'DCC ballast section power lost: local control':'DCC ballast section power lost']);
+  if(!S.firemain) A.push(['caution','Firemain pressure low']);
+  if(S.condAirbound) A.push(['alarm','Engine room: condenser vacuum dropping']);
+  if(S.allPowerLost) A.push(['alarm','LOSS OF POWER: ballast operations halted, sea valves failed closed']);
+  else if(!S.wdPanelPower) A.push(['alarm','Well deck ballast panel power lost']);
+  for(const c of S.dbac){
+    if(c.lowOil) A.push(['caution',`DBAC-${c.n} tripped: low lube oil`]);
+    else if(c.failing) A.push(['alarm',`DBAC-${c.n} high vibration`]);
+    else if(c.failed) A.push(['caution',`DBAC-${c.n} out of service`]);
+  }
+  // unloader stuck open: no alarm; the tell is that unit's discharge pressure (SIB: transducer indicates at the DCC)
+  for(const t of S.tanks) if(t.sea&&Math.abs(t.pos.sea-t.tgt.sea)>.01&&S.t-t.cmdT>STROKE.sea*((!S.dccPower&&S.localCtl)?2:1)+10) A.push(['caution',`${t.id} sea valve not responding`]);
+  }
+  S.curAlarms=A;
+  if(MODE!=='instructor'){
+    const keys=new Set(A.map(a=>a[1]));
+    for(const [sev,msg] of A) if(!S.alarmSet.has(msg)) log(msg,sev);
+    S.alarmSet=keys;
+  }
+  $('#alarms').innerHTML=A.length?A.map(([s,m])=>`<span class="chip ${s}">${m}</span>`).join(''):'<span class="chip ok">No alarms</span>';
+  const ok1=S.hg>=8&&S.hg<=10, ok2=la<1, ok3=S.gateAng>=85;
+  const w=S.tanks.filter(t=>t.g==='wing'), wr=w.map(t=>t.V/t.cap), wOK=wr.every(f=>f>=.2&&f<=.55);
+  const pre=S.prestage==null?`<span class="chip ${wOK?'ok':''}">Wing walls ${Math.round(Math.min(...wr)*100)}–${Math.round(Math.max(...wr)*100)}% · prestage 25–50</span>`
+    :`<span class="chip ${S.prestage?'ok':'caution'}">${S.prestageNote}</span>`;
+  $('#objChips').innerHTML=pre+`<span class="chip ${ok3?'ok':''}">Gate ${Math.round(S.gateAng)}°</span><span class="chip ${ok1?'ok':''}">Well ${S.hg>.05?fmt(S.hg,1)+' ft':'dry'} · target 8–10</span><span class="chip ${ok2?'ok':'caution'}">List ${fmt(la,1)}° · limit 1°</span><span class="chip ${S.tOver1<1?'ok':S.tOver1>600?'alarm':'caution'}">Over 1°: ${hms(S.tOver1).slice(3)}</span><span class="chip ${S.maxList<=1?'ok':S.maxList>3?'alarm':'caution'}">Max ${fmt(S.maxList,1)}°</span>${S.craft?`<span class="chip ${S.craft.state==='docked'&&!S.craft.aground?'ok':'caution'}">${S.craft.type} ${S.craft.aground?'aground':S.craft.state}</span>`:''}`;
+  if(dirtyLog){$('#log').innerHTML=S.log.slice(0,40).map(l=>`<li class="${l.sev}"><time>${hms(l.t)}</time><span>${l.msg}</span></li>`).join('');dirtyLog=false;}
+}
+
+/* ---- well deck view (canvas, perspective from the well deck control room) ---- */
+const CAM={x:470,z:50};
+// wing wall catwalks along the top of the well: ~20 ft above the well deck (user), 6 ft wide (est), stepping outboard
+const WW_CAT={z:WELL_FLOOR+20, yOut:31};
+// Boatswain's Mates on the wing walls (view y: + = port/right, - = stbd/left). The caller at the stbd end reports depth at the sill.
+const BMS=[
+  {x:612,y:-28,vest:'#e2772b'},{x:694,y:-28.5,vest:'#e2772b'},{x:771,y:-28,vest:'#e2772b',caller:true},
+  {x:640,y:28,vest:'#e2772b'},{x:722,y:28.5,vest:'#2f6fb5'},{x:767,y:28,vest:'#e2772b'},
+];
+function drawBM(c,P,bm,now){
+  const sway=Math.sin(now/950+bm.x*.37)*.12, y=bm.y+sway, zc=WW_CAT.z;
+  const [u,vb]=P(bm.x,y,zc), [,vh]=P(bm.x,y,zc+5.9), h=vb-vh; if(h<3) return;
+  const w=h*.32;
+  c.fillStyle='#1f2b3f'; c.fillRect(u-w*.38,vb-h*.47,w*.3,h*.47); c.fillRect(u+w*.08,vb-h*.47,w*.3,h*.47);       // legs (coveralls)
+  c.fillStyle=bm.vest; c.fillRect(u-w*.5,vb-h*.83,w,h*.4);                                                          // float coat
+  c.fillStyle='rgba(235,240,210,.85)'; c.fillRect(u-w*.5,vb-h*.62,w,Math.max(1,h*.035));                           // reflective stripe
+  c.fillStyle=bm.vest;
+  if(bm.caller){ c.fillRect(u+w*.42,vb-h*.93,w*.18,h*.34); c.fillStyle='#16191b'; c.fillRect(u+w*.36,vb-h*1.02,w*.22,h*.13);
+    c.strokeStyle='#16191b'; c.lineWidth=Math.max(1,h*.02); c.beginPath(); c.moveTo(u+w*.5,vb-h*1.02); c.lineTo(u+w*.5,vb-h*1.12); c.stroke(); }
+  else { c.fillRect(u-w*.62,vb-h*.8,w*.14,h*.32); c.fillRect(u+w*.48,vb-h*.8,w*.14,h*.32); }
+  c.fillStyle='#c9a27e'; c.beginPath(); c.arc(u,vb-h*.9,h*.075,0,Math.PI*2); c.fill();                                 // head
+  c.fillStyle='#e6e9ea'; c.beginPath(); c.arc(u,vb-h*.915,h*.08,Math.PI,0); c.fill();                                // cranial
+}
+// sill depth callouts every 0.5 ft, with hysteresis so small wobbles don't repeat a call
+const CALL={L:null,dry:true,msg:'',at:-1e9};
+const RAMP={prev:null,tgt:0};
+function sayRadio(text){
+  if(!AUD.on||!('speechSynthesis' in window)) return;
+  try{ if(speechSynthesis.pending) speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text.replace(/ ft$/,' feet').replace(/ 45$/,' forty-five')); u.rate=1.05; u.pitch=.85; u.volume=.9; speechSynthesis.speak(u);}catch(_){}
+}
+function radioCall(text,now,tag=''){ CALL.msg=text; CALL.at=now; if(MODE!=='instructor') log(`BM (sill): ${text}${tag?' '+tag:''}`); sayRadio(text); }
+function sillCall(now,P){
+  // ramp (stern gate) calls, both directions
+  const a=S.gateAng;
+  if(RAMP.prev==null){RAMP.prev=a; RAMP.tgt=S.gateTgt;}
+  else{
+    const p=RAMP.prev;
+    if(S.gateTgt!==RAMP.tgt){
+      const stopped=S.gateTgt!==0&&S.gateTgt!==45&&S.gateTgt<GATE_FULL;
+      if(stopped&&Math.abs(S.gateTgt-a)<.01&&a>0.5&&a<GATE_FULL) radioCall(`Ramp stopped at ${Math.round(a)}`,now);
+      else if(S.gateTgt>a+.01) radioCall(p<.5?'Ramp coming down':'Ramp lowering',now);
+      else if(S.gateTgt<a-.01) radioCall('Ramp coming up',now);
+      RAMP.tgt=S.gateTgt;
+    }
+    if((p<45&&a>=45)||(p>45&&a<=45)) radioCall(Math.abs(S.gateTgt-45)<.01?'Ramp at 45':'Ramp passing 45',now);
+    if(p<GATE_FULL&&a>=GATE_FULL) radioCall('Ramp is down',now);
+    if(p>0&&a<=0) radioCall('Ramp is closed',now);
+    RAMP.prev=a;
+  }
+  // depth at the sill every 0.5 ft
+  const hg=S.hg; let text=null, dir='';
+  if(CALL.L==null){CALL.L=Math.floor(hg/.5); CALL.dry=hg<.1;}
+  else{
+    let L=CALL.L;
+    while(hg>=(L+1)*.5+.03) L++;
+    while(L>0&&hg<L*.5-.03) L--;
+    if(L!==CALL.L){ dir=L>CALL.L?'↑':'↓'; CALL.L=L; const v=Math.max(.5,Math.round(hg*2)/2); text=`Depth at the sill ${v.toFixed(1)} ft`; CALL.dry=false; }
+    else if(!CALL.dry&&hg<.05){ CALL.dry=true; dir='↓'; text='Sill is dry'; }
+  }
+  if(text) radioCall(text,now,dir);
+  // radio bubble over the caller
+  const age=now-CALL.at; if(age>4500||!CALL.msg) return;
+  const bm=BMS.find(b=>b.caller), [u,vh]=P(bm.x,bm.y,WW_CAT.z+5.9);
+  const cv=c2d(); const alpha=age>3500?1-(age-3500)/1000:1;
+  cv.save(); cv.globalAlpha=alpha; cv.font='700 13px Barlow Condensed, Arial Narrow, sans-serif';
+  const t=CALL.msg.toUpperCase(), tw=cv.measureText(t).width+34, bh=24;
+  let bx=Math.max(10,Math.min(u-tw*.3,cv.canvas.clientWidth-tw-10)), by=Math.max(10,vh-bh-14);
+  cv.fillStyle='rgba(18,22,24,.92)'; cv.strokeStyle='rgba(255,214,140,.9)'; cv.lineWidth=1.2;
+  cv.beginPath(); cv.roundRect?cv.roundRect(bx,by,tw,bh,5):cv.rect(bx,by,tw,bh); cv.fill(); cv.stroke();
+  cv.beginPath(); cv.moveTo(Math.min(Math.max(u,bx+8),bx+tw-8),vh-4); cv.lineTo(Math.min(Math.max(u,bx+8),bx+tw-8)-6,by+bh); cv.lineTo(Math.min(Math.max(u,bx+8),bx+tw-8)+6,by+bh); cv.closePath(); cv.fill();
+  cv.fillStyle='rgba(255,214,140,.95)'; cv.fillRect(bx+9,by+7,7,11); cv.fillRect(bx+14,by+3,1.5,5);   // radio icon
+  cv.textAlign='left'; cv.fillText(t,bx+24,by+16.5); cv.restore();
+}
+const c2d=()=>$('#wellcv').getContext('2d');
+const foam=[];
+let foamAcc=0;
+function drawWell(realDt,now){
+  const cv=$('#wellcv'); if(!cv) return;
+  const Wc=cv.clientWidth; if(!Wc) return;
+  const Hc=Math.round(Math.min(Wc*.58,520)), dpr=Math.min(2,window.devicePixelRatio||1);
+  if(cv.width!==Math.round(Wc*dpr)||cv.height!==Math.round(Hc*dpr)){cv.width=Math.round(Wc*dpr);cv.height=Math.round(Hc*dpr);cv.style.height=Hc+'px';}
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
+  const f=Wc*1.08, cx=Wc/2, cy=Hc*.42;
+  const P=(x,y,z)=>{const d=Math.max(2,x-CAM.x);return [cx+f*y/d, cy-f*(z-CAM.z)/d];};
+  const path=pts=>{c.beginPath();pts.forEach(([u,v],i)=>i?c.lineTo(u,v):c.moveTo(u,v));c.closePath();};
+  const fill=(pts,st)=>{path(pts);c.fillStyle=st;c.fill();};
+  const line=(a,b,st,w=1)=>{c.beginPath();c.moveTo(...a);c.lineTo(...b);c.strokeStyle=st;c.lineWidth=w;c.stroke();};
+  const s=Math.max((S.Ta-S.Tf)/LWL,1e-4), tl=Math.tan(S.list*Math.PI/180); // y + = port (screen right)
+  const seaZ=(x,y)=>S.Tf+(S.Ta-S.Tf)*x/LWL-y*tl;
+  const wz=(x,y)=>WELL_FLOOR+S.hg-s*(LWL-x)-y*tl;
+  const Z0=WELL_FLOOR, ZT=57, YL=-25, YR=25, XF=WELL_X0, XA=LWL;
+
+  // surroundings (overhead structure)
+  c.fillStyle='#23292b'; c.fillRect(0,0,Wc,Hc);
+
+  // outside through the stern opening: sky above the horizon, sea below
+  const O=[P(XA,YL,Z0),P(XA,YR,Z0),P(XA,YR,ZT),P(XA,YL,ZT)];
+  c.save(); path(O); c.clip();
+  const vh=u=>cy-f*s+(u-cx)*tl;
+  let g=c.createLinearGradient(0,O[2][1],0,vh(cx)); g.addColorStop(0,'#8fb0c3'); g.addColorStop(1,'#d9e5e8');
+  c.fillStyle=g; c.fillRect(0,0,Wc,Hc);
+  g=c.createLinearGradient(0,vh(cx),0,O[0][1]+40); g.addColorStop(0,'#5d8795'); g.addColorStop(1,'#1f4a5a');
+  fill([[0,vh(0)],[Wc,vh(Wc)],[Wc,Hc],[0,Hc]],g);
+  // swell lines on the sea
+  c.strokeStyle='rgba(255,255,255,.18)'; c.lineWidth=1;
+  for(let k=1;k<7;k++){const v=vh(cx)+k*k*1.6+((now/900)%1)*k*.8;c.beginPath();c.moveTo(0,v+(0-cx)*tl);c.lineTo(Wc,v+(Wc-cx)*tl);c.stroke();}
+
+  // stern gate: hinged at the sill, swings outboard
+  const ph=S.gateAng*Math.PI/180, gx=XA+GATE_LEN*Math.sin(ph), gz=Z0+GATE_LEN*Math.cos(ph);
+  const Gq=[P(XA,YL,Z0),P(XA,YR,Z0),P(gx,YR,gz),P(gx,YL,gz)];
+  g=c.createLinearGradient(...Gq[0],...Gq[3]); g.addColorStop(0,'#5b6568'); g.addColorStop(1,'#88939a');
+  fill(Gq,g); c.strokeStyle='#2c3335'; c.lineWidth=1.2; path(Gq); c.stroke();
+  for(let k=1;k<6;k++){const y=YL+k*(YR-YL)/6; line(P(XA,y,Z0),P(gx,y,gz),'rgba(30,36,38,.45)');}
+  for(let k=1;k<4;k++){const t=k/4; line(P(XA+(gx-XA)*t,YL,Z0+(gz-Z0)*t),P(XA+(gx-XA)*t,YR,Z0+(gz-Z0)*t),'rgba(30,36,38,.35)');}
+  // part of the gate under the outside sea
+  {let lo=0,hi=1; const gzAt=t=>Z0+(gz-Z0)*t-seaZ(XA+(gx-XA)*t,0);
+   if(gzAt(0)<0){ if(gzAt(1)<0) hi=1; else { for(let i=0;i<20;i++){const m=(lo+hi)/2; if(gzAt(m)<0) lo=m; else hi=m;} }
+     const t=hi, Wq=[P(XA,YL,Z0),P(XA,YR,Z0),P(XA+(gx-XA)*t,YR,Z0+(gz-Z0)*t),P(XA+(gx-XA)*t,YL,Z0+(gz-Z0)*t)];
+     fill(Wq,'rgba(31,74,90,.72)'); }}
+  c.restore();
+
+  // well deck structure
+  const F=[P(XF,YL,Z0),P(XA,YL,Z0),P(XA,YR,Z0),P(XF,YR,Z0)];
+  fill(F,'#5a615e');
+  for(let y=-20;y<=20;y+=5) line(P(XF,y,Z0),P(XA,y,Z0),'rgba(0,0,0,.18)');
+  for(let x=XF+10;x<XA;x+=10) line(P(x,YL,Z0),P(x,YR,Z0),'rgba(0,0,0,.14)');
+  line(P(XF,0,Z0),P(XA,0,Z0),'rgba(236,190,60,.75)',2);
+  // wing walls: lower wall up to the catwalk, catwalk deck stepping outboard, upper wall to the overhead
+  const ZC=WW_CAT.z, YO=WW_CAT.yOut;
+  fill([P(XF,-YO,ZT),P(XA,-YO,ZT),P(XA,YO,ZT),P(XF,YO,ZT)],'#3a4143');                 // overhead
+  fill([P(XF,-YO,ZC),P(XA,-YO,ZC),P(XA,-YO,ZT),P(XF,-YO,ZT)],'#868e8b');              // stbd upper wall
+  fill([P(XF,YO,ZC),P(XA,YO,ZC),P(XA,YO,ZT),P(XF,YO,ZT)],'#7c8481');                  // port upper wall
+  fill([P(XF,YL,ZC),P(XA,YL,ZC),P(XA,-YO,ZC),P(XF,-YO,ZC)],'#6c736f');                // stbd catwalk deck
+  fill([P(XF,YR,ZC),P(XA,YR,ZC),P(XA,YO,ZC),P(XF,YO,ZC)],'#666d69');                  // port catwalk deck
+  fill([P(XF,YL,Z0),P(XA,YL,Z0),P(XA,YL,ZC),P(XF,YL,ZC)],'#7d8582');                  // stbd lower wall
+  fill([P(XF,YR,Z0),P(XA,YR,Z0),P(XA,YR,ZC),P(XF,YR,ZC)],'#747c79');                  // port lower wall
+  fill([P(XA,YL,ZC),P(XA,-YO,ZC),P(XA,-YO,ZT),P(XA,YL,ZT)],'#2c3335');                // stern bulkhead beside the opening
+  fill([P(XA,YR,ZC),P(XA,YO,ZC),P(XA,YO,ZT),P(XA,YR,ZT)],'#2c3335');
+  for(let x=XF+8;x<XA;x+=8){ line(P(x,YL,ZC),P(x,-YO,ZC),'rgba(0,0,0,.12)'); line(P(x,YR,ZC),P(x,YO,ZC),'rgba(0,0,0,.12)'); }
+  for(let fr=90;fr<=128;fr+=3){const x=fx(fr); if(x<XF||x>XA) continue;
+    line(P(x,YL,Z0),P(x,YL,ZC),'rgba(40,46,48,.5)'); line(P(x,YR,Z0),P(x,YR,ZC),'rgba(40,46,48,.5)');
+    line(P(x,-YO,ZC),P(x,-YO,ZT),'rgba(40,46,48,.5)'); line(P(x,YO,ZC),P(x,YO,ZT),'rgba(40,46,48,.5)');
+    line(P(x,-YO,ZT),P(x,YO,ZT),'rgba(0,0,0,.35)',1.5);}
+  // catwalk edge (lip)
+  line(P(XF,YL,ZC),P(XA,YL,ZC),'#9aa19d',1.5); line(P(XF,YR,ZC),P(XA,YR,ZC),'#9aa19d',1.5);
+  // frame stencils on the lower wing walls, above the waterline
+  c.fillStyle='rgba(240,240,230,.8)'; c.textAlign='center';
+  for(let fr=90;fr<=125;fr+=5){const x=fx(fr); if(x<XF+8) continue; const d=x-CAM.x, sz=Math.max(7,f*3.2/d);
+    c.font=`700 ${sz}px Barlow Condensed, Arial Narrow, sans-serif`;
+    let [u,v]=P(x,YL+.1,Z0+15); c.fillText('FR '+fr,u+sz*.9,v); [u,v]=P(x,YR-.1,Z0+15); c.fillText('FR '+fr,u-sz*.9,v);}
+  // sill line
+  line(P(XA,YL,Z0),P(XA,YR,Z0),'#c9a24a',2);
+
+  // water in the well
+  if(S.hg>.02){
+    const side=y=>{const dg=S.hg-y*tl; if(dg<=0) return null; const xn=Math.max(XF,XA-dg/s); return {xn,zn:Math.max(Z0,wz(xn,y)),za:wz(XA,y)};};
+    const L=side(YL), R=side(YR);
+    for(const [y,sd] of [[YL,L],[YR,R]]) if(sd) fill([P(sd.xn,y,Z0),P(XA,y,Z0),P(XA,y,sd.za),P(sd.xn,y,sd.zn)],'rgba(38,104,126,.55)');
+    if(L&&R){
+      const Sq=[P(L.xn,YL,L.zn),P(XA,YL,L.za),P(XA,YR,R.za),P(R.xn,YR,R.zn)];
+      g=c.createLinearGradient(0,Sq[0][1],0,Sq[1][1]); g.addColorStop(0,'rgba(92,150,160,.82)'); g.addColorStop(1,'rgba(40,98,118,.9)');
+      fill(Sq,g);
+      // ripples drifting with the flow
+      const x0=Math.max(L.xn,R.xn), span=XA-x0, dir=S.wellQ>=0?-1:1, spd=Math.min(40,6+Math.abs(S.wellQ)/60);
+      c.lineWidth=1;
+      for(let k=0;k<10;k++){let x=XA-(((now/1000)*spd*(dir<0?1:-1)+k*span/10)%span+span)%span; if(x<x0+1) continue;
+        c.strokeStyle=`rgba(230,245,250,${.10+.12*(1-(XA-x)/span)})`; const a=P(x,YL,wz(x,YL)), b=P(x,YR,wz(x,YR)); c.beginPath();c.moveTo(...a);c.lineTo(...b);c.stroke();}
+    }
+  }
+
+  // foam where water is moving through the gate
+  const q=S.wellQ;
+  if(Math.abs(q)>2&&S.gateAng>.5){
+    foamAcc+=realDt*Math.min(260,Math.abs(q)/8+20);
+    const full=S.gateAng>=85, htop=Math.max(S.Ta-WELL_FLOOR,S.hg,0);
+    while(foamAcc>1){foamAcc--;
+      const y=full?(Math.random()*2-1)*24:(Math.random()<.5?-1:1)*(23+Math.random()*1.5);
+      foam.push({x:XA-(q>0?0:30*Math.random()),y,z:Z0+Math.random()*Math.max(.5,Math.min(htop,S.hg+.5)),vx:(q>0?-1:1)*(10+Math.random()*16)*(full?1.4:1),vy:full?0:(y<0?1:-1)*(2+Math.random()*4),life:1.2+Math.random()*1.6});}
+  }
+  for(let i=foam.length-1;i>=0;i--){const p=foam[i]; p.life-=realDt; p.x+=p.vx*realDt; p.y+=p.vy*realDt; p.y=Math.max(-24.5,Math.min(24.5,p.y));
+    if(p.life<=0||p.x<XF||p.x>XA+4){foam.splice(i,1);continue;}
+    const zs=S.hg>.02?Math.max(Z0,wz(p.x,p.y)):Z0+.2, [u,v]=P(p.x,p.y,Math.min(p.z,zs)+.15), r=Math.max(.8,f*.35/(p.x-CAM.x));
+    c.fillStyle=`rgba(245,250,252,${Math.min(.85,p.life*.5)})`; c.beginPath(); c.ellipse(u,v,r*1.8,r*.7,0,0,Math.PI*2); c.fill();}
+  if(foam.length>900) foam.splice(0,foam.length-900);
+
+  // vehicles staged at the forward end of the well (drawn far-to-near)
+  if(S.vehSide&&S.vehSide!=='none'){
+    const yc=S.vehY*-1; // ship y (+stbd) -> view y (+port)
+    const vbox=(x0,x1,y0,y1,h,top,front)=>{fill([P(x0,y0,Z0+h),P(x1,y0,Z0+h),P(x1,y1,Z0+h),P(x0,y1,Z0+h)],top);fill([P(x0,y0,Z0),P(x0,y1,Z0),P(x0,y1,Z0+h),P(x0,y0,Z0+h)],front);};
+    for(const [x0,len,w,h] of [[560,22,9,9],[534,20,8.5,8],[515,16,8,10]]){
+      const y0=yc-w/2;
+      vbox(x0,x0+len,y0,y0+w,h,'#6b7a5a','#56644a');
+      fill([P(x0,y0+1,Z0+h*.55),P(x0,y0+w-1,Z0+h*.55),P(x0,y0+w-1,Z0+h*.85),P(x0,y0+1,Z0+h*.85)],'rgba(30,38,40,.8)');
+    }
+  }
+  // catwalk railings (inboard edge of each wing wall)
+  for(const y of [YL,YR]){
+    for(let x=XF+4;x<XA;x+=9) line(P(x,y,ZC),P(x,y,ZC+3.6),'#b9beba',1.2);
+    line(P(XF,y,ZC+3.6),P(XA-1,y,ZC+3.6),'#c3c8c4',1.6); line(P(XF,y,ZC+1.9),P(XA-1,y,ZC+1.9),'#aeb3af',1);
+  }
+  // Boatswain's Mates on the wing walls; the craft occludes the ones behind it
+  const cr=S.craft, crFront=cr?cr.x:Infinity;
+  for(const bm of BMS) if(bm.x>=crFront) drawBM(c,P,bm,now);
+  if(cr) drawCraft(c,P,cr,wz,fill,line,f);
+  for(const bm of BMS) if(bm.x<crFront) drawBM(c,P,bm,now);
+  sillCall(now,P);
+
+  // control room window frame + HUD
+  c.lineWidth=14; c.strokeStyle='#15191a'; c.strokeRect(0,0,Wc,Hc);
+  c.fillStyle='#15191a'; c.fillRect(Wc*.5-3,0,6,Hc*.07);
+  c.font='700 13px Barlow Condensed, Arial Narrow, sans-serif'; c.textAlign='left'; c.fillStyle='rgba(255,214,140,.95)';
+  c.fillText('STBD',16,Hc-16); c.textAlign='right'; c.fillText('PORT',Wc-16,Hc-16);
+  c.textAlign='left'; c.font='600 12px IBM Plex Mono, monospace'; c.fillStyle='rgba(235,240,238,.92)';
+  const ho=S.Ta-WELL_FLOOR;
+  c.fillText(`GATE ${Math.round(S.gateAng)}°`,16,24);
+  c.fillText(`WELL ${fmt(S.hg,1)} FT`,16,40);
+  c.fillText(`SEA ${ho>=0?fmt(ho,1)+' FT OVER':fmt(-ho,1)+' FT BELOW'} SILL`,16,56);
+  if(S.t45!=null){c.fillStyle='rgba(255,214,140,.95)';c.fillText(`AT 45° ${hms(S.t-S.t45).slice(3)}`,16,88);c.fillStyle='rgba(235,240,238,.92)';}
+  if(Math.abs(q)>2){c.fillStyle=q>0?'rgba(120,200,230,.95)':'rgba(255,200,120,.95)';c.fillText(q>0?`FLOODING IN ${Math.round(q*60).toLocaleString()} FT³/MIN`:`DRAINING ${Math.round(-q*60).toLocaleString()} FT³/MIN`,16,72);}
+}
+function drawCraft(c,P,cr,wz,fill,line,f){
+  const sp=CRAFT[cr.type], xf=cr.x, xb=cr.x+sp.L, B2=sp.B/2, xm=(xf+xb)/2;
+  const inWell=x=>x<=LWL;
+  const waterAt=x=>inWell(x)?(S.hg>.02?wz(x,0):WELL_FLOOR-50):S.Tf+(S.Ta-S.Tf)*x/LWL;
+  // clip to the well corridor/opening so parts hidden by structure do not show
+  c.save(); const n=[P(WELL_X0,-25,WELL_FLOOR-8),P(WELL_X0,25,WELL_FLOOR-8),P(WELL_X0,25,57),P(WELL_X0,-25,57)];
+  c.beginPath(); n.forEach(([u,v],i)=>i?c.lineTo(u,v):c.moveTo(u,v)); c.closePath(); c.clip();
+  const box=(x0,x1,y0,y1,z0,z1,top,front,edge='rgba(0,0,0,.45)')=>{
+    const T=[P(x0,y0,z1),P(x1,y0,z1),P(x1,y1,z1),P(x0,y1,z1)], Fr=[P(x0,y0,z0),P(x0,y1,z0),P(x0,y1,z1),P(x0,y0,z1)];
+    fill(T,top); fill(Fr,front); c.strokeStyle=edge; c.lineWidth=1; c.beginPath(); Fr.forEach(([u,v],i)=>i?c.lineTo(u,v):c.moveTo(u,v)); c.closePath(); c.stroke();};
+  if(cr.type==='LCU'){
+    const dr=cr.draft, wl=waterAt(xm), floating=!cr.aground&&wl-dr>WELL_FLOOR-.01||!inWell(xm);
+    const bottom=floating?wl-dr:WELL_FLOOR, deck=bottom+dr+sp.fb, zv=Math.max(bottom,Math.min(wl,deck-1));
+    // pilothouse aft (drawn first: it is farther away)
+    box(xb-26,xb-8,-7,7,deck,deck+16,'#c9ccc6','#e4e6e1');
+    for(let k=0;k<4;k++){const y=-6+k*3.3;fill([P(xb-26,y,deck+11),P(xb-26,y+2.2,deck+11),P(xb-26,y+2.2,deck+14),P(xb-26,y,deck+14)],'#2c3a40');}
+    line(P(xb-17,0,deck+16),P(xb-17,0,deck+26),'#3a4244',2);
+    // cargo well + wing walls of the LCU
+    box(xf,xb-26,-B2,B2,deck-4,deck-3.5,'#6c736f','#6c736f');
+    box(xf,xb-26,-B2,-B2+3,zv,deck,'#8d9592','#99a19e'); box(xf,xb-26,B2-3,B2,zv,deck,'#8d9592','#99a19e');
+    // bow ramp facing the control room
+    box(xf,xf+2,-B2,B2,zv,deck+1,'#7c8582','#8f9895');
+    line(P(xf,-B2+3,deck-2),P(xf,B2-3,deck-2),'rgba(0,0,0,.35)',1);
+    c.fillStyle='rgba(20,24,26,.85)'; const [u,v]=P(xf,0,deck-4.5), sz=Math.max(8,f*3/(xf-CAM.x));
+    c.font=`700 ${sz}px Barlow Condensed, Arial Narrow, sans-serif`; c.textAlign='center'; c.fillText('LCU',u,v);
+  } else {
+    const wl=waterAt(xm), base=Math.max(WELL_FLOOR,inWell(xm)?wl:wl)+(cr.state==='docked'?0:1.5);
+    const skirtTop=base+5, deck=skirtTop+3;
+    // propeller ducts at the stern (farthest)
+    for(const y of [-12,12]){const [u,v]=P(xb-3,y,deck+10), r=f*7/(xb-3-CAM.x); c.beginPath(); c.arc(u,v,r,0,Math.PI*2); c.fillStyle='#3d4547'; c.fill(); c.lineWidth=Math.max(1.5,r*.18); c.strokeStyle='#8a9496'; c.stroke();}
+    box(xf+2,xb-2,-B2+2,B2-2,skirtTop,deck,'#9aa39f','#a9b1ad');
+    box(xf+4,xf+26,-B2+3,-B2+11,deck,deck+10,'#c6cac4','#d8dbd6'); // stbd control cab (left in view)
+    box(xf+4,xf+22,B2-11,B2-3,deck,deck+8,'#c6cac4','#d8dbd6');
+    fill([P(xf+5,-B2+4,deck+7),P(xf+5,-B2+10,deck+7),P(xf+5,-B2+10,deck+9),P(xf+5,-B2+4,deck+9)],'#2c3a40');
+    box(xf,xf+3,-B2,B2,base,skirtTop,'#1e2224','#26292b');
+    c.fillStyle='rgba(20,24,26,.85)'; const [u,v]=P(xf+2,0,deck-1), sz=Math.max(8,f*2.6/(xf+2-CAM.x));
+    c.font=`700 ${sz}px Barlow Condensed, Arial Narrow, sans-serif`; c.textAlign='center'; c.fillText('LCAC',u,v);
+  }
+  c.restore();
+}
+
+/* ---- sound (Web Audio, synthesized; starts only after the user presses Sound) ---- */
+const AUD={ctx:null,on:false,dbac:[],water:null,master:null};
+function noiseBuffer(ctx,brown){
+  const n=ctx.sampleRate*3, b=ctx.createBuffer(1,n,ctx.sampleRate), d=b.getChannelData(0); let last=0;
+  for(let i=0;i<n;i++){const w=Math.random()*2-1; if(brown){last=(last+.02*w)/1.02; d[i]=last*3.5;} else d[i]=w;}
+  return b;
+}
+function loopSrc(ctx,buf){const s=ctx.createBufferSource(); s.buffer=buf; s.loop=true; s.start(0,Math.random()*2); return s;}
+function audioInit(){
+  const Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx) return false;
+  const ctx=new Ctx(); AUD.ctx=ctx;
+  const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-18; comp.ratio.value=4; comp.connect(ctx.destination);
+  const master=ctx.createGain(); master.gain.value=0; master.connect(comp); AUD.master=master;
+  const white=noiseBuffer(ctx,false), brown=noiseBuffer(ctx,true);
+  // six DBACs: low blower drone (lobe pulsing) + air rush; panned by room (fwd rooms left, aft room right)
+  const pans=[-.6,-.6,0,0,.6,.6];
+  for(let i=0;i<6;i++){
+    const out=ctx.createGain(); out.gain.value=0;
+    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null; if(pan){pan.pan.value=pans[i]+(i%2?.12:-.12); out.connect(pan); pan.connect(master);} else out.connect(master);
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=420; lp.Q.value=.8; lp.connect(out);
+    const o1=ctx.createOscillator(); o1.type='sawtooth'; o1.frequency.value=0;
+    const o2=ctx.createOscillator(); o2.type='square'; o2.frequency.value=0;
+    const g1=ctx.createGain(); g1.gain.value=.55; const g2=ctx.createGain(); g2.gain.value=.18;
+    o1.connect(g1).connect(lp); o2.connect(g2).connect(lp);
+    const nz=loopSrc(ctx,white), bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=700; bp.Q.value=.7;
+    const ng=ctx.createGain(); ng.gain.value=0; nz.connect(bp).connect(ng).connect(out);
+    // load oscillation: LFO on pitch
+    const lfo=ctx.createOscillator(); lfo.type='sine'; lfo.frequency.value=.7+i*.13;
+    const lfoG=ctx.createGain(); lfoG.gain.value=0; lfo.connect(lfoG); lfoG.connect(o1.frequency);
+    const lfoG2=ctx.createGain(); lfoG2.gain.value=0; lfo.connect(lfoG2); lfoG2.connect(o2.frequency);
+    o1.detune.value=(i-2.5)*9; o2.detune.value=(i-2.5)*9;
+    [o1,o2,lfo].forEach(o=>o.start());
+    AUD.dbac.push({out,lp,o1,o2,ng,lfoG,lfoG2,spin:0});
+  }
+  // water: brown-noise rumble + white-noise spray, gains follow flow through the gate
+  const wOut=ctx.createGain(); wOut.gain.value=0; wOut.connect(master);
+  const rum=loopSrc(ctx,brown), rlp=ctx.createBiquadFilter(); rlp.type='lowpass'; rlp.frequency.value=250;
+  const rg=ctx.createGain(); rg.gain.value=0; rum.connect(rlp).connect(rg).connect(wOut);
+  const spr=loopSrc(ctx,white), sbp=ctx.createBiquadFilter(); sbp.type='bandpass'; sbp.frequency.value=1600; sbp.Q.value=.6;
+  const sg=ctx.createGain(); sg.gain.value=0; spr.connect(sbp).connect(sg).connect(wOut);
+  const wl=ctx.createOscillator(); wl.frequency.value=.23; const wlg=ctx.createGain(); wlg.gain.value=0; wl.connect(wlg).connect(wOut.gain); wl.start();
+  AUD.water={wOut,rlp,rg,sbp,sg,wlg};
+  return true;
+}
+function audioUpdate(realDt){
+  if(!AUD.on||!AUD.ctx) return;
+  const ctx=AUD.ctx, t=ctx.currentTime, k=.08;
+  AUD.master.gain.setTargetAtTime(speed===0?0:.55,t,.15);
+  S.dbac.forEach((c,i)=>{
+    const v=AUD.dbac[i];
+    const target=c.state==='starting'?Math.min(1,c.tm/START_T):c.state==='running'?1:0;
+    // spin up follows the start sequence; coast down takes a few seconds when stopped
+    v.spin+=(target-v.spin)*Math.min(1,realDt*(target>v.spin?3:.5));
+    const f=26+32*v.spin-(c.loaded?3:0);   // ~58 Hz lobe drone at speed: low, not whiny
+    v.o1.frequency.setTargetAtTime(f,t,k); v.o2.frequency.setTargetAtTime(f*2,t,k);
+    const osc=c.loaded?f*.075:0;          // loaded: pitch oscillates
+    v.lfoG.gain.setTargetAtTime(osc,t,.6); v.lfoG2.gain.setTargetAtTime(osc*2,t,.6);
+    v.lp.frequency.setTargetAtTime(260+260*v.spin+(c.loaded?160:0),t,k);
+    v.ng.gain.setTargetAtTime((c.loaded?.30:.12)*v.spin,t,.3);
+    v.out.gain.setTargetAtTime(.16*Math.pow(v.spin,1.4),t,.12);
+  });
+  const w=AUD.water, q=Math.abs(S.wellQ), lvl=Math.min(1,Math.sqrt(q/1800)), jets=S.gateAng<85;
+  w.wOut.gain.setTargetAtTime(q>2?.5:0,t,.4);
+  w.wlg.gain.setTargetAtTime(q>2?.12:0,t,.4);
+  w.rg.gain.setTargetAtTime(lvl*(jets?.45:1),t,.3);
+  w.rlp.frequency.setTargetAtTime(180+500*lvl,t,.3);
+  w.sg.gain.setTargetAtTime(lvl*(jets?.55:.3),t,.3);
+  w.sbp.frequency.setTargetAtTime(jets?2000:1200,t,.5);
+}
+$('#soundBtn').addEventListener('click',async()=>{
+  const b=$('#soundBtn');
+  if(!AUD.ctx){ if(!audioInit()){b.textContent='No audio';b.disabled=true;return;} }
+  AUD.on=!AUD.on;
+  try{ if(AUD.on) await AUD.ctx.resume(); else AUD.master.gain.setTargetAtTime(0,AUD.ctx.currentTime,.05); }catch(_){}
+  b.textContent=AUD.on?'Sound on':'Sound off'; b.setAttribute('aria-pressed',String(AUD.on));
+});
+
+/* ---- two screens: trainee runs the sim and shares a snapshot through room presence;
+        instructor mirrors it and sends commands on the admin-only 'cmd' topic ---- */
+const LINK={room:null,nr:null,code:'',joining:false,err:'',peerT:null,peerI:null,snapAt:0,lastPub:0};
+const MI={NORMAL:0,BALLAST:1,PRE:2,DEBLST:3}, MODE_ARR=['NORMAL','BALLAST','PRE','DEBLST'], SI={off:0,starting:1,running:2}, ST_ARR=['off','starting','running'];
+const r3=x=>Math.round((+x||0)*1000)/1000;
+function cleanCode(){ const c=String($('#sessCode').value||'').toLowerCase().replace(/[^a-z0-9_.-]/g,'').replace(/^[^a-z0-9]+/,'').slice(0,24); return c||'drill-1'; }
+function sendCmd(o){
+  if(MODE!=='instructor'){ applyCmd(o); return; }
+  if(!LINK.nr){ linkStatus('Not connected: command not sent','caution'); return; }
+  LINK.nr.emit('cmd',o).catch(e=>linkStatus(e&&e.code==='not_permitted'?'Only the owner or an Editor can run the instructor screen':'Command not sent. Check the connection','caution'));
+}
+function linkStatus(msg,cls=''){ const s=$('#linkStat'); s.textContent=msg; s.className='chip '+cls; }
+async function connectLink(){
+  const code=cleanCode(); $('#sessCode').value=code;
+  if(LINK.nr&&LINK.code===code){ LINK.nr.presence({r:MODE,c:code}).catch(()=>{}); return; }
+  await leaveLink();
+  if(!window.claude||!window.claude.use){ linkStatus('Two screens need this page open on claude.ai, signed in','caution'); return; }
+  LINK.joining=true; linkStatus('Connecting…');
+  if(!LINK.room) LINK.room=await window.claude.use('room');
+  if(!LINK.room){ LINK.joining=false; linkStatus('Two-screen link unavailable in this view (open the link on claude.ai, signed in)','caution'); return; }
+  try{ LINK.nr=await LINK.room.join('lhd-'+code); }catch(e){ LINK.joining=false; linkStatus('Could not join the session. Try again','caution'); return; }
+  LINK.code=code; LINK.joining=false;
+  LINK.nr.presence({r:MODE,c:code}).catch(()=>{});
+  LINK.nr.on('cmd',m=>{ if(MODE==='trainee') applyCmd(m.data); });
+  LINK.nr.onPeers(ch=>{
+    const others=ch.peers.filter(p=>!p.sameTab);
+    LINK.peerT=others.find(p=>p.presence&&p.presence.r==='trainee')||null;
+    LINK.peerI=others.find(p=>p.presence&&p.presence.r==='instructor')||null;
+    if(MODE==='instructor'&&LINK.peerT&&LINK.peerT.presence.s){ try{ applySnap(LINK.peerT.presence.s); LINK.snapAt=Date.now(); }catch(_){} }
+  });
+}
+async function leaveLink(){ const nr=LINK.nr; LINK.nr=null; LINK.peerT=LINK.peerI=null; if(nr){ try{await nr.leave();}catch(_){}} }
+function setScreen(m,persist=true){
+  if(!['solo','trainee','instructor'].includes(m)) m='solo';
+  const was=MODE; MODE=m;
+  document.body.classList.toggle('mode-trainee',m==='trainee'); document.body.classList.toggle('mode-instructor',m==='instructor');
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===m)));
+  if(persist) try{localStorage.setItem('lhdbt-screen',m);}catch(_){}
+  if(was==='instructor'&&m!=='instructor') resetAll();          // drop the mirrored state
+  if(m==='instructor') $('#tab-cas').click();
+  if(m==='solo'){ leaveLink(); linkStatus('Solo: one screen'); } else connectLink();
+}
+function updateLinkStatus(){
+  if(MODE==='solo'||LINK.joining||!LINK.nr) return;
+  if(MODE==='trainee') linkStatus(LINK.peerI?`Linked to instructor · ${LINK.code}`:`Waiting for instructor · ${LINK.code}`,LINK.peerI?'ok':'');
+  else { const age=LINK.snapAt?Math.round((Date.now()-LINK.snapAt)/1000):null;
+    linkStatus(LINK.peerT?(age!=null&&age<5?`Mirroring trainee · ${LINK.code}`:`Trainee connected, waiting for data · ${LINK.code}`):`Waiting for trainee · ${LINK.code}`,LINK.peerT&&age!=null&&age<5?'ok':''); }
+}
+function snapshot(){
+  const s={v:1,t:r3(S.t),sp:speed,Tf:r3(S.Tf),Ta:r3(S.Ta),L:r3(S.list),gm:r3(S.gm),gs:r3(S.gmSolid),W:Math.round(S.W),bal:Math.round(S.bal),wl:Math.round(S.wellLT||0),
+    hg:r3(S.hg),q:Math.round(S.wellQ),ga:r3(S.gateAng),gt:S.gateTgt,ph:r3(S.Ph),rl:S.relief?1:0,fm:S.firemain?1:0,dp:S.dccPower?1:0,wp:S.wdPanelPower?1:0,
+    ap:S.allPowerLost?1:0,wc:S.wdControl?1:0,lc:S.localCtl?1:0,mn:S.dbacManned?1:0,ml:r3(S.maxList),o1:Math.round(S.tOver1),vs:S.vehSide||'none',vy:S.vehY||0,
+    t45:S.t45==null?-1:Math.round(S.t45),
+    tk:S.tanks.map(t=>{const f=t.flags;return [Math.round(1000*t.V/t.cap),MI[t.mode]||0,r3(t.pos.sea),r3(t.pos.blow),r3(t.pos.fm),r3(t.pos.drain),Math.round(1000*tli(t)),
+      (f.overflow?1:0)|(f.drainStall?2:0)|(f.blowThru?4:0)|(f.backflood?8:0)|(t.tliReported?16:0)|(t.tliChronic?32:0),t.tgt.fm?1:0,t.tgt.drain?1:0];}),
+    db:S.dbac.map(c=>[SI[c.state]||0,c.loaded?1:0,Math.round(c.temp),(c.failed?1:0)|(c.lowOil?2:0)|(c.unloaderStuck?4:0)|(c.failing?8:0),Math.round(c.tm)]),
+    cr:S.craft?[S.craft.type,Math.round(S.craft.x),S.craft.state,S.craft.aground?1:0,S.craft.draft||0]:0,
+    cs:S.cas.slice(-8).map(r=>[r.key,String(r.target||'').slice(0,24),Math.round(r.t0),r.tClr==null?-1:Math.round(r.tClr),r.hidden?1:0]),
+    al:(S.curAlarms||[]).slice(0,6).map(([sv,m])=>[sv,String(m).slice(0,70)]),
+    lg:S.log.slice(0,6).map(l=>[Math.round(l.t),String(l.msg).slice(0,90),l.sev||'']),
+    pe:[S.procErrs.length,String((S.procErrs[S.procErrs.length-1]||{}).msg||'').slice(0,90)],
+    tu:[TUNE.gap,TUNE.list,TUNE.veh,TUNE.tliChronic,S.casHide?1:0,S.casAuto?1:0],
+    ps:[S.prestage==null?-1:S.prestage?1:0,String(S.prestageNote||'').slice(0,50)]};
+  // presence is capped at 4 KiB: trim the log and alarms if needed
+  let j=JSON.stringify(s); while(new TextEncoder().encode(j).length>3700&&(s.lg.length||s.al.length)){ if(s.lg.length) s.lg.pop(); else s.al.pop(); j=JSON.stringify(s); }
+  return s;
+}
+function applySnap(s){
+  if(!s||s.v!==1) return;
+  const N=x=>+x||0;
+  S.t=N(s.t); if([0,1,10,30,60].includes(s.sp)) setSpeed(s.sp);
+  Object.assign(S,{Tf:N(s.Tf),Ta:N(s.Ta),list:N(s.L),gm:N(s.gm),gmSolid:N(s.gs),W:N(s.W),bal:N(s.bal),wellLT:N(s.wl),hg:N(s.hg),wellD:N(s.hg),wellQ:N(s.q),
+    gateAng:N(s.ga),gateTgt:N(s.gt),Ph:N(s.ph),relief:!!s.rl,firemain:!!s.fm,dccPower:!!s.dp,wdPanelPower:!!s.wp,allPowerLost:!!s.ap,wdControl:!!s.wc,
+    localCtl:!!s.lc,dbacManned:!!s.mn,maxList:N(s.ml),tOver1:N(s.o1),t45:N(s.t45)<0?null:N(s.t45)});
+  S.gate=S.gateAng>.5; S.vehSide=['none','port','stbd'].includes(s.vs)?s.vs:'none'; S.vehY=N(s.vy);
+  if(Array.isArray(s.tk)) S.tanks.forEach((t,i)=>{const a=s.tk[i]; if(!Array.isArray(a)) return;
+    t.V=Math.min(1,Math.max(0,N(a[0])/1000))*t.cap; t.mode=MODE_ARR[a[1]]||'NORMAL'; t.pos.sea=N(a[2]); t.pos.blow=N(a[3]); t.pos.fm=N(a[4]); t.pos.drain=N(a[5]);
+    t.tgt.sea=MODES[t.mode].sea; t.tgt.blow=MODES[t.mode].blow; t.tgt.fm=a[8]?1:0; t.tgt.drain=a[9]?1:0; t.mirrorTli=N(a[6])/1000;
+    const b=N(a[7]); t.flags={overflow:!!(b&1),drainStall:!!(b&2),blowThru:!!(b&4),backflood:!!(b&8)}; t.tliReported=!!(b&16); t.tliChronic=!!(b&32);});
+  if(Array.isArray(s.db)) S.dbac.forEach((c,i)=>{const a=s.db[i]; if(!Array.isArray(a)) return;
+    c.state=ST_ARR[a[0]]||'off'; c.loaded=!!a[1]; c.temp=N(a[2]); const b=N(a[3]); c.failed=!!(b&1); c.lowOil=!!(b&2); c.unloaderStuck=!!(b&4); c.failing=!!(b&8); c.tm=N(a[4]);});
+  S.craft=Array.isArray(s.cr)&&CRAFT[s.cr[0]]?{type:s.cr[0],x:N(s.cr[1]),state:String(s.cr[2]),aground:!!s.cr[3],draft:N(s.cr[4])}:null;
+  if(Array.isArray(s.cs)) S.cas=s.cs.filter(a=>Array.isArray(a)&&CAS[a[0]]).map(a=>({key:a[0],name:CAS[a[0]].name,target:String(a[1]),t0:N(a[2]),tClr:N(a[3])<0?null:N(a[3]),hidden:!!a[4]}));
+  S.mirAlarms=Array.isArray(s.al)?s.al.filter(Array.isArray).map(a=>[['alarm','caution'].includes(a[0])?a[0]:'caution',String(a[1])]):[];
+  if(Array.isArray(s.lg)){ S.log=s.lg.filter(Array.isArray).map(a=>({t:N(a[0]),msg:String(a[1]),sev:['alarm','caution'].includes(a[2])?a[2]:''})); dirtyLog=true; }
+  if(Array.isArray(s.pe)){ const n=Math.max(0,N(s.pe[0])|0), m=String(s.pe[1]||''); S.procErrs=Array.from({length:Math.min(n,99)},()=>({msg:m})); }
+  if(Array.isArray(s.ps)){ S.prestage=N(s.ps[0])<0?null:!!s.ps[0]; S.prestageNote=String(s.ps[1]||''); }
+  // keep the instructor's controls showing the trainee's actual settings (not while being edited)
+  if(Array.isArray(s.tu)){ const [g,l,v,tc,h,au]=s.tu, act=document.activeElement, setv=(id,val)=>{const e=$(id); if(e&&e!==act) e.value=val;};
+    if(+g>0){ setv('#gapTune',g); if($('#gapTune')!==act) $('#gapRead').textContent=`Cd ${(+g).toFixed(2)}`; }
+    setv('#listTend',l); setv('#vehSel',v); setv('#tliChronic',tc); $('#casHide').checked=!!h; $('#casAuto').checked=!!au; }
+}
+$('#modeSeg').addEventListener('click',e=>{const b=e.target.closest('button[data-mode]'); if(b) setScreen(b.dataset.mode);});
+$('#sessCode').addEventListener('change',()=>{ if(MODE!=='solo') connectLink(); });
+
+/* ---- loop ---- */
+let last=performance.now(), acc=0, lastRender=0, lastSolve=0;
+function frame(now){
+  const real=Math.min(.25,(now-last)/1000); last=now;
+  acc+=real*speed;
+  let n=0;
+  if(MODE==='instructor') acc=0;                 // instructor screen runs no physics: it mirrors the trainee
+  else { while(acc>=DT&&n<4000){step(DT);acc-=DT;n++;} if(n>0){Object.assign(S,solveAndReturn());} }
+  if(now-lastRender>100){render();lastRender=now;updateLinkStatus();}
+  if(MODE==='trainee'&&LINK.nr&&now-LINK.lastPub>1000){ LINK.lastPub=now; LINK.nr.presence({r:'trainee',c:LINK.code,s:snapshot()}).catch(()=>{}); }
+  drawWell(real,now);
+  audioUpdate(real);
+  requestAnimationFrame(frame);
+}
+init(); buildPanes(); buildProfile();
+try{const tb=localStorage.getItem('lhdbt-tab'); if(tb&&tabs.includes(tb)) $('#tab-'+tb).click();}catch(_){}
+setSpeed(10);
+log('Normal condition: 27′ fwd / 28′ aft, all ballast tanks empty, stern gate raised');
+{ let m0='solo'; try{ m0=localStorage.getItem('lhdbt-screen')||'solo'; }catch(_){}
+  const h=(location.hash||'').slice(1); if(['solo','trainee','instructor'].includes(h)) m0=h;
+  try{ const c=localStorage.getItem('lhdbt-code'); if(c) $('#sessCode').value=c; }catch(_){}
+  $('#sessCode').addEventListener('change',()=>{ try{localStorage.setItem('lhdbt-code',cleanCode());}catch(_){} });
+  setScreen(m0,false); }
+render(); requestAnimationFrame(frame);
+window.SIM={S,hydro,solveAndReturn,step,setMode,toggleValve,init,setSpeed,bringCraft,TUNE,rollList,CAS,ACT,injectCas,dbacCmd,snapshot,applySnap,setScreen,sendCmd,D0,W0,LCG0,KG0};
+})();
+</script>
+
+</body></html>
