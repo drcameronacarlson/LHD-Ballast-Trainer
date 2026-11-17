@@ -206,6 +206,7 @@ body.mode-instructor .mirrorNote{display:block}
 .linkbar details p{margin:6px 0;max-width:80ch}
 #newPw{width:20ch}
 #newKey{width:min(100%,68ch)}
+.wellctl select{font-family:var(--font-body);font-size:13px;padding:5px 6px;border:1px solid var(--edge);border-radius:4px;background:var(--btn);color:var(--btn-ink)}
 .foot b{color:var(--ink-2)}
 /* console look: painted steel panels, lensed lamps, illuminated pushbuttons */
 .wdp,.room,.hdr,.trow{--hi:rgba(255,255,255,.16);--lo:rgba(0,0,0,.2)}
@@ -337,6 +338,13 @@ body.mode-instructor .mirrorNote{display:block}
             <button class="tbtn" id="bringLCAC">Bring in LCAC</button>
             <button class="tbtn" id="launch">Launch craft</button>
             <button class="tbtn" id="waveOff">Wave off</button>
+            <button class="tbtn" id="secureBtn">Secure LCU</button>
+          </div>
+          <div class="wgrp">
+            <span class="wlbl">Cargo</span>
+            <select id="cargoSel" aria-label="What to load or unload"><option value="3">Vehicles and personnel</option><option value="1">Vehicles</option><option value="2">Personnel</option></select>
+            <button class="tbtn" id="unloadBtn">Unload craft</button>
+            <button class="tbtn" id="loadBtn">Load craft</button>
           </div>
         </div>
         <div class="wgrp tune instrCtl">
@@ -373,7 +381,7 @@ body.mode-instructor .mirrorNote{display:block}
           <select id="lightSel"><option value="day">Day</option><option value="dusk">Dusk</option><option value="night">Night (red light)</option></select>
           <span class="note">3D view only. Ship motion is visual: it does not change drafts, list or flow.</span>
         </div>
-        <p class="note" id="craftMsg">Lower the gate to 45° to let the first water in. At about 3 ft in the well, open it all the way. LCU needs 5 ft light or 7 ft loaded; LCAC needs a dry well (1 ft max).</p>
+        <p class="note" id="craftMsg">Lower the gate to 45° to let the first water in. At about 3 ft in the well, open it all the way. An LCU comes alive at 5 ft light or 7.5 ft loaded; LCAC needs a dry well (1 ft max). The well holds 2 LCUs or 3 LCACs, parked from the forward end back.</p>
       </section>
       <section class="card traineeCtl" id="radioCard">
         <h2>Radio · DC Central</h2>
@@ -571,7 +579,7 @@ function wellProps(hg,s){ // centroid x, z and wetted length
 }
 const CRAFT={
   // user: LCU ~6 ft loaded; minimum ~5 ft of water depending on load. LCAC: dry well, 1 ft max.
-  LCU:{name:'LCU',L:135,B:29,fb:8,speed:4,loads:{light:{draft:4,need:5},loaded:{draft:6,need:7}}},
+  LCU:{name:'LCU',L:135,B:29,fb:8,speed:4,loads:{light:{draft:4,need:5,ground:4},loaded:{draft:6,need:7.5,ground:6.5}}},   // need: well depth at which it comes alive (floats); ground: depth at which it settles again
   LCAC:{name:'LCAC',L:88,B:47,speed:5,maxWater:1},
 };
 
@@ -646,7 +654,7 @@ const lin=(dp,k=.05)=>dp/Math.sqrt(Math.max(Math.abs(dp),k)); // ~sqrt(dp), line
 const S={};
 function init(){
   S.t=0; S.gate=false; S.firemain=true; S.wdControl=false;
-  S.gateAng=0; S.gateTgt=0; S.wellV=0; S.hg=0; S.wellQ=0; S.craft=null; S.t45=null;
+  S.gateAng=0; S.gateTgt=0; S.wellV=0; S.hg=0; S.wellQ=0; S.craft=null; S.crafts=[]; S.craftId=0; S.t45=null;
   S.tOver1=0; S.maxList=0; S.prestage=null; S.prestageNote='';
   S.walk=null; S.spd=10; S.spdOrd=10; S.fod=[]; S.fodFound=false; S.fodHit=false; S.fodWarned=false;
   rollList();
@@ -768,23 +776,26 @@ function step(dt){
   if(Math.abs(S.gateAng-45)<.01&&S.gateTgt===45){ if(S.t45==null) S.t45=S.t; } else S.t45=null;
   if(hgPrev<3&&S.hg>=3){ log(S.t45!=null?`3 ft in the well, ${hms(S.t-S.t45).slice(3)} after the gate reached 45°`:'3 ft in the well'); }
   // craft
-  const cr=S.craft;
-  if(cr){
-    const c=cr, spec=CRAFT[c.type];
-    const depthAt=x=>S.hg-slope*(LWL-x);
-    if(c.state==='entering'){
-      let nx=c.x-spec.speed*dt;
-      if(c.type==='LCU'&&depthAt(Math.max(nx,WELL_X0))<c.draft+.2&&nx<LWL){ c.state='docked'; c.aground=true; log('LCU touched bottom in the well: needs more water','caution'); }
-      else if(nx<=c.park){ nx=c.park; c.state='docked'; log(`${spec.name} in the well and secured`); }
-      c.x=nx;
-    } else if(c.state==='launching'){
-      c.x+=spec.speed*dt; if(c.x>LWL+spec.L+120){ log(`${spec.name} clear of the stern`); S.craft=null; }
-    } else if(c.state==='docked'&&c.type==='LCU'){
-      const gr=depthAt(c.x+spec.L/2)<c.draft; if(gr&&!c.aground) log('LCU aground on the well deck','caution'); c.aground=gr;
-    } else if(c.state==='docked'&&c.type==='LCAC'){
-      const wet=S.hg>spec.maxWater; if(wet&&!c.wet) log(`Water over ${spec.maxWater} ft with LCAC in the well`,'caution'); c.wet=wet;
-    }
-  }
+  // The well holds 2 LCUs or 3 LCACs (user). One craft moves at a time and drives to the most forward free slot.
+  // S.craft is the craft of interest: the one moving, otherwise the aft-most one (the next to launch).
+  { const depthAt=x=>S.hg-slope*(LWL-x);
+    for(let i=S.crafts.length-1;i>=0;i--){ const c=S.crafts[i], spec=CRAFT[c.type];
+      if(c.state==='docked'){
+        if(c.lines!==c.lineTgt){ c.lineAcc=(c.lineAcc||0)+dt;        // one line every 12 s: forward pair, midships pair, after pair
+          if(c.lineAcc>=12){ c.lineAcc=0; c.lines+=Math.sign(c.lineTgt-c.lines);
+            if(c.lines===6) log(`LCU ${i+1} secured: three lines a side, forward, midships and aft`); else if(c.lines===0) log(`LCU ${i+1} lines cast off`); } }
+        if(c.xfer){ const x=c.xfer; x.t+=dt;
+          if(x.t>=x.T){ const on=x.kind==='load'?1:0; if(x.what&1) c.veh=on; if(x.what&2) c.pax=on;
+            if(c.type==='LCU'){ c.load=c.veh?'loaded':'light'; c.draft=spec.loads[c.load].draft; }
+            log(`${c.type} ${i+1} ${on?'loaded':'unloaded'}: ${cargoName(x.what)}`); c.xfer=null; } } }
+      if(c.state==='entering'){ let nx=c.x-spec.speed*dt; if(nx<=c.park){ nx=c.park; c.state='docked'; log(`${spec.name} ${i+1} in the well and secured`); } c.x=nx; }
+      else if(c.state==='launching'){ c.x+=spec.speed*dt; if(c.x>LWL+spec.L+120){ log(`${spec.name} clear of the stern`); S.crafts.splice(i,1); } }
+      else if(c.type==='LCU'){ const L=spec.loads[c.load]||spec.loads.loaded, was=c.afloat;   // comes alive at 5 ft light / 7.5 ft loaded, grounds again as the well drains (user)
+        if(!c.afloat&&S.hg>=L.need) c.afloat=true; else if(c.afloat&&S.hg<=L.ground) c.afloat=false;
+        if(was!==c.afloat) log(c.afloat?`LCU ${i+1} is alive: afloat in the well`:`LCU ${i+1} grounded on the well deck`,c.afloat&&c.lines<6?'caution':'');
+        c.aground=!c.afloat; }
+      else { const wet=S.hg>spec.maxWater; if(wet&&!c.wet) log(`Water over ${spec.maxWater} ft with LCAC ${i+1} in the well`,'caution'); c.wet=wet; } }
+    S.craft=S.crafts.find(c=>c.state!=='docked')||S.crafts[S.crafts.length-1]||null; }
   S.mh+=(supply-demand)*dt;
   // blow header rupture: air escapes until the damaged section is isolated
   // sized so air never builds in the header (user: "no air would reach the header")
@@ -1047,7 +1058,7 @@ $('#gateSeg').addEventListener('click',e=>{const b=e.target.closest('button');if
   if(g==='stop'){S.gateTgt=S.gateAng;log(`Stern gate stopped at ${Math.round(S.gateAng)}°`);return;}
   const tgt=+g;
   if(c&&(c.state==='entering'||c.state==='launching')&&tgt<85){craftMsg(`Gate interlock: ${c.type} is moving through the stern gate.`);return;}
-  if(c&&c.x+CRAFT[c.type].L>LWL&&tgt<85){craftMsg(`Gate interlock: ${c.type} is still over the gate.`);return;}
+  if(tgt<85&&S.crafts.some(q=>q.x+CRAFT[q.type].L>LWL+4)){craftMsg('Gate interlock: a craft is still over the gate.');return;}
   S.gateTgt=tgt; log(`Stern gate: ${tgt===0?'close':tgt>=GATE_FULL?'lower to full down':'lower to '+tgt+'°'}`);
   // prestage check (user's practice): wing walls 25-50% on both sides before flooding the well
   if(tgt>0&&S.prestage==null&&S.hg<.05){
@@ -1124,35 +1135,42 @@ let lcuLoad='loaded';
 $('#lcuLoad').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;lcuLoad=b.dataset.l;
   document.querySelectorAll('#lcuLoad button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
   const L=CRAFT.LCU.loads[lcuLoad]; craftMsg(`LCU ${lcuLoad}: draft about ${L.draft} ft, needs ${L.need} ft of water.`);});
+// slots run from the forward end of the well aft. Staged vehicles take the forward 75 ft and one slot.
+const craftCap=type=>(type==='LCU'?2:3)-(S.vehSide&&S.vehSide!=='none'?1:0);
+const craftSlot=(type,i)=>(S.vehSide&&S.vehSide!=='none'?WELL_X0+74:type==='LCU'?WELL_X0-4:WELL_X0+1)+i*(CRAFT[type].L+(type==='LCU'?1:2));
 function bringCraft(type){
-  const spec=CRAFT[type];
-  if(S.craft){craftMsg(`The ${S.craft.type} is already in or at the well. Launch it first.`);return;}
+  const spec=CRAFT[type], n=S.crafts.length;
+  if(S.crafts.some(c=>c.state!=='docked')){craftMsg('A craft is already moving. Wait until it is secured or clear.');return;}
+  if(n&&S.crafts[0].type!==type){craftMsg(`The well holds ${S.crafts[0].type}s. Launch them before bringing in an ${type}.`);return;}
+  if(n>=craftCap(type)){craftMsg(`The well is full: ${n} ${type}${n>1?'s':''}${S.vehSide&&S.vehSide!=='none'?' with vehicles staged forward':''}.`);return;}
   if(S.spd>SPD_MAX+.05){craftMsg(`Ship speed ${fmt(S.spd,1)} kts: slow to ${SPD_MAX} kts or less to recover craft.`);return;}
   if(type==='LCAC'&&S.fodFound&&S.fod.length){craftMsg('Well deck is fouled. Clear the foreign object before LCAC operations.');return;}
   if(S.walk){craftMsg('FOD walkdown in progress: personnel are in the well deck.');return;}
   if(S.gateAng<85){craftMsg(`Stern gate must be full down before the ${type} can enter.`);return;}
-  const slope=Math.max((S.Ta-S.Tf)/LWL,1e-4);
-  let park=WELL_X0+18, draft=0;
+  let draft=0;
   if(type==='LCU'){
     const L=spec.loads[lcuLoad]; draft=L.draft;
     if(S.hg<L.need){craftMsg(`Not enough water for a ${lcuLoad} LCU: ${fmt(S.hg,1)} ft at the gate, needs ${L.need} ft.`);return;}
-    const xok=LWL-(S.hg-(draft+.5))/slope; park=Math.max(park,xok);
-    if(park+spec.L>LWL+20){craftMsg('Not enough length of deep water for the LCU. Ballast down further.');return;}
   } else if(S.hg>spec.maxWater){craftMsg(`LCAC needs a dry well: ${fmt(S.hg,1)} ft in the well, ${spec.maxWater} ft max. Deballast first.`);return;}
-  S.craft={type,x:LWL+260,park,draft,load:type==='LCU'?lcuLoad:null,state:'entering',aground:false,wet:false};
-  log(`${type}${type==='LCU'?' ('+lcuLoad+')':''} approaching the stern`); craftMsg(`${type} inbound.`);
+  const ld=lcuLoad==='loaded'?1:0;
+  S.crafts.push({id:++S.craftId,type,x:LWL+260,park:craftSlot(type,n),draft,load:type==='LCU'?lcuLoad:null,state:'entering',aground:false,wet:false,afloat:true,lines:0,lineTgt:0,veh:ld,pax:ld,xfer:null});
+  S.craft=S.crafts[S.crafts.length-1];
+  log(`${type} ${n+1}${type==='LCU'?' ('+lcuLoad+')':''} approaching the stern`); craftMsg(`${type} ${n+1} of ${craftCap(type)} inbound.`);
 }
 $('#bringLCU').addEventListener('click',()=>bringCraft('LCU'));
 $('#bringLCAC').addEventListener('click',()=>bringCraft('LCAC'));
-$('#launch').addEventListener('click',()=>{const c=S.craft;
-  if(!c||c.state!=='docked'){craftMsg('No craft secured in the well.');return;}
+$('#launch').addEventListener('click',()=>{const c=S.crafts[S.crafts.length-1];
+  if(S.crafts.some(q=>q.state!=='docked')){craftMsg('A craft is already moving. Wait until it is secured or clear.');return;}
+  if(!c){craftMsg('No craft secured in the well.');return;}
   if(S.gateAng<85){craftMsg('Lower the stern gate full down to launch.');return;}
   if(S.spd>SPD_MAX+.05){craftMsg(`Ship speed ${fmt(S.spd,1)} kts: slow to ${SPD_MAX} kts or less to launch craft.`);return;}
   if(c.type==='LCAC'&&S.fodFound&&S.fod.length){craftMsg('Well deck is fouled. Clear the foreign object before LCAC operations.');return;}
   if(S.walk){craftMsg('FOD walkdown in progress: personnel are in the well deck.');return;}
+  if(c.xfer){craftMsg(`${c.type} is still being ${c.xfer.kind==='load'?'loaded':'unloaded'}.`);return;}
+  if(c.type==='LCU'&&(c.lines>0||c.lineTgt>0)){craftMsg('Cast off the LCU lines before launching.');return;}
   if(c.type==='LCU'&&c.aground){craftMsg('LCU is aground. Add water to the well to float it before launching.');return;}
   if(c.type==='LCU'&&S.hg<CRAFT.LCU.loads[c.load].need){craftMsg(`Need ${CRAFT.LCU.loads[c.load].need} ft at the gate to launch a ${c.load} LCU; have ${fmt(S.hg,1)} ft.`);return;}
-  c.state='launching'; log(`${c.type} launching`); craftMsg(`${c.type} backing out.`);
+  c.state='launching'; S.craft=c; log(`${c.type} ${S.crafts.length} launching`); craftMsg(`${c.type} backing out.${S.crafts.length>1?' '+(S.crafts.length-1)+' still in the well.':''}`);
 });
 function resetAll(){init();buildPanes();CALL.L=null;CALL.msg='';RAMP.prev=null;$('#casAuto').checked=false;log('Simulation reset: normal condition 27′ fwd / 28′ aft');}
 $('#resetBtn').addEventListener('click',()=>{ if(MODE==='instructor') sendCmd({op:'reset'}); else resetAll(); });
@@ -1435,6 +1453,7 @@ function render(){
   setRO('#roB',Math.round(S.bal).toLocaleString()+' LT',S.wellLT>1?`+ ${Math.round(S.wellLT).toLocaleString()} LT in well`:`${Math.round(S.bal*FT3_LT).toLocaleString()} ft³`);
   setRO('#roD',Math.round(S.W).toLocaleString()+' LT','long tons');
   setRO('#roS',fmt(S.spd,1)+' kts',Math.abs(S.spdOrd-S.spd)>.05?`coming to ${S.spdOrd} kts`:`limit ${SPD_MAX} for well deck ops`,S.spd>SPD_MAX+.05?'warn':'good');
+  { const lc=S.crafts.filter(q=>q.type==='LCU'&&q.state==='docked'); $('#secureBtn').textContent=lc.length&&lc.every(q=>q.lineTgt>=6)?'Cast off lines':'Secure LCU'; }
   document.querySelectorAll('#spdSeg button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.k===S.spdOrd)));
 
   // well deck panel
@@ -1481,7 +1500,7 @@ function renderAlarms(){
   if(la>3) A.push(['alarm',`List ${fmt(la,1)}° ${S.list>0?'stbd':'port'}`]); else if(la>1) A.push(['caution',`List ${fmt(la,1)}° ${S.list>0?'stbd':'port'}`]);
   if(S.gm<2) A.push(['alarm','Low GM']); else if(S.gm<4) A.push(['caution','GM reduced']);
   if(S.hg>11) A.push(['caution','Well depth high']);
-  if(S.craft&&S.craft.type==='LCAC'&&S.hg>CRAFT.LCAC.maxWater) A.push(['caution',`LCAC in the well with ${fmt(S.hg,1)} ft of water (1 ft max)`]);
+  if(S.crafts.some(q=>q.type==='LCAC')&&S.hg>CRAFT.LCAC.maxWater) A.push(['caution',`LCAC in the well with ${fmt(S.hg,1)} ft of water (1 ft max)`]);
   if(S.gateAng>50&&S.wellQ>0&&(S.Ta-WELL_FLOOR)-S.hg>4) A.push(['caution','Surge: well flooding fast. Hold the gate at 45° until about 3 ft is in']);
   if(S.gateAng<.5&&S.Ta-WELL_FLOOR>12) A.push(['caution','Deep water on a closed stern gate']);
   for(const t of S.tanks){
@@ -1494,6 +1513,7 @@ function renderAlarms(){
   if(S.spd>SPD_MAX+.05&&((S.craft&&S.craft.state!=='docked')||S.tanks.some(t=>t.mode==='BALLAST'))) A.push(['caution',`Ship at ${fmt(S.spd,1)} kts during well deck operations (limit ${SPD_MAX})`]);
   if(S.fod.length&&S.fodFound) A.push(['caution','Well deck fouled: foreign object']);
   if(S.fodHit) A.push(['alarm','LCAC foreign object damage']);
+  S.crafts.forEach((q,i)=>{ if(q.type==='LCU'&&q.state==='docked'&&q.afloat&&q.lines<6) A.push(['caution',`LCU ${i+1} afloat and not secured`]); });
   // casualty symptoms (what the operator would actually see)
   if(!S.dccPower) A.push(['alarm',S.localCtl?'DCC ballast section power lost: local control':'DCC ballast section power lost']);
   if(!S.firemain) A.push(['caution','Firemain pressure low']);
@@ -1519,7 +1539,7 @@ function renderAlarms(){
   const w=S.tanks.filter(t=>t.g==='wing'), wr=w.map(t=>t.V/t.cap), wOK=wr.every(f=>f>=.2&&f<=.55);
   const pre=S.prestage==null?`<span class="chip ${wOK?'ok':''}">Wing walls ${Math.round(Math.min(...wr)*100)}–${Math.round(Math.max(...wr)*100)}% · prestage 25–50</span>`
     :`<span class="chip ${S.prestage?'ok':'caution'}">${S.prestageNote}</span>`;
-  $('#objChips').innerHTML=`<span class="chip ${S.spd<=SPD_MAX+.05?'ok':'caution'}">Speed ${fmt(S.spd,1)} kts · limit ${SPD_MAX}</span>`+pre+`<span class="chip ${ok3?'ok':''}">Gate ${Math.round(S.gateAng)}°</span><span class="chip ${ok1?'ok':''}">Well ${S.hg>.05?fmt(S.hg,1)+' ft':'dry'} · target 8–10</span><span class="chip ${ok2?'ok':'caution'}">List ${fmt(la,1)}° · limit 1°</span><span class="chip ${S.tOver1<1?'ok':S.tOver1>600?'alarm':'caution'}">Over 1°: ${hms(S.tOver1).slice(3)}</span><span class="chip ${S.maxList<=1?'ok':S.maxList>3?'alarm':'caution'}">Max ${fmt(S.maxList,1)}°</span>${S.craft?`<span class="chip ${S.craft.state==='docked'&&!S.craft.aground?'ok':'caution'}">${S.craft.type} ${S.craft.aground?'aground':S.craft.state}</span>`:''}`;
+  $('#objChips').innerHTML=`<span class="chip ${S.spd<=SPD_MAX+.05?'ok':'caution'}">Speed ${fmt(S.spd,1)} kts · limit ${SPD_MAX}</span>`+pre+`<span class="chip ${ok3?'ok':''}">Gate ${Math.round(S.gateAng)}°</span><span class="chip ${ok1?'ok':''}">Well ${S.hg>.05?fmt(S.hg,1)+' ft':'dry'} · target 8–10</span><span class="chip ${ok2?'ok':'caution'}">List ${fmt(la,1)}° · limit 1°</span><span class="chip ${S.tOver1<1?'ok':S.tOver1>600?'alarm':'caution'}">Over 1°: ${hms(S.tOver1).slice(3)}</span><span class="chip ${S.maxList<=1?'ok':S.maxList>3?'alarm':'caution'}">Max ${fmt(S.maxList,1)}°</span>${S.crafts.map((q,i)=>`<span class="chip ${q.state==='docked'&&!q.aground?'ok':'caution'}">${q.type} ${i+1} ${q.aground?'aground':q.state}</span>`).join('')}`;
   if(dirtyLog){$('#log').innerHTML=S.log.slice(0,40).map(l=>`<li class="${l.sev}"><time>${hms(l.t)}</time><span>${l.msg}</span></li>`).join('');dirtyLog=false;}
 }
 
@@ -1736,9 +1756,9 @@ function drawWell(realDt,now){
     line(P(XF,y,ZC+3.6),P(XA-1,y,ZC+3.6),'#c3c8c4',1.6); line(P(XF,y,ZC+1.9),P(XA-1,y,ZC+1.9),'#aeb3af',1);
   }
   // Boatswain's Mates on the wing walls; the craft occludes the ones behind it
-  const cr=S.craft, crFront=cr?cr.x:Infinity;
+  const crFront=S.crafts.length?Math.min(...S.crafts.map(q=>q.x)):Infinity;
   for(const bm of BMS) if(bm.x>=crFront) drawBM(c,P,bm,now);
-  if(cr) drawCraft(c,P,cr,wz,fill,line,f);
+  for(const cr of S.crafts.slice().sort((a,b)=>b.x-a.x)) drawCraft(c,P,cr,wz,fill,line,f);
   for(const bm of BMS) if(bm.x<crFront) drawBM(c,P,bm,now);
   sillCall(now,P); drawFodMark(c,P);
   drawWellHud(c,Wc,Hc,false);
@@ -2165,10 +2185,6 @@ function g3lcu(load){
   const fg=new THREE.PlaneGeometry(4.4,2.5,1,1); fg.translate(2.2,0,0); fg.rotateY(Math.PI/2);
   const flag=new THREE.Mesh(fg,X.flag); flag.position.set(0,15.8,-133.85); g.add(flag);
   g3fig(g,13,7.5,8.7,0x2f6fb5,Math.PI); g3fig(g,113,1.5,15.8,0xe2772b,0);
-  if(load!=='light'){
-    const put=(v,x0,len,y)=>{ v.rotation.y=Math.PI; v.position.copy(g3v(x0+len,y,8.7)); g.add(v); };
-    put(g3truck(22,9,9,M.olive),24,22,0); put(g3hmv(M.tan),52,15.5,-4.6); put(g3hmv(M.olive),52,15.5,4.6); put(g3hmv(M.olive),74,15.5,-4.6); put(g3hmv(M.tan),74,15.5,4.6);
-  }
   const wg=new THREE.PlaneGeometry(24,50); wg.rotateX(-Math.PI/2);
   const wash=new THREE.Mesh(wg,X.wash); wash.position.set(0,dr+.2,-160); wash.renderOrder=4; wash.visible=false; g.add(wash);
   return {g,rp,radar,zb:null,anim(t,dt,cr){ flag.rotation.y=Math.sin(t*3.1)*.28+Math.sin(t*7.3)*.06; wash.visible=cr.state==='entering'; }};
@@ -2213,7 +2229,6 @@ function g3lcac(){
     g3box(top,76,82,cx-1,cx+1,8.6,10.4,M.hull);
     for(const o of[-2.6,2.6]) g3box(top,82.8,84.8,cx+o-.2,cx+o+.2,10.4,24.6,M.hull);
   }
-  const hv=g3hmv(M.tan); hv.rotation.y=Math.PI; hv.position.copy(g3v(34+15.5,0,2.6)); top.add(hv);
   // spray: droplets thrown out by the skirt and torn off the surface by the propeller wash, plus a drifting mist. Only over water.
   const NS=520, NM=110, sp=new Float32Array(NS*3), sv=new Float32Array(NS*3), sl=new Float32Array(NS), mp=new Float32Array(NM*3), mv=new Float32Array(NM*3), ml=new Float32Array(NM);
   for(let i=0;i<NS;i++) sp[i*3+1]=-999; for(let i=0;i<NM;i++) mp[i*3+1]=-999;
@@ -2254,15 +2269,44 @@ function g3fod(fo){
   else add(new THREE.ConeGeometry(.75,2.3,12),M.orange,1.15);
   return g;
 }
+// vehicles and troops belong to the scene, not the craft, so they can drive or walk between a craft and the forward end of the well
+function g3cargo(C,t){
+  const cr=C.cr, lay=CARGO[cr.type], M=G3.M, Z0=WELL_FLOOR;
+  if(!C.vehs){ C.vehs=lay.veh.map(([x0,len,y,tr],i)=>{ const m=tr?g3truck(22,9,9,M.olive):g3hmv(i%2?M.tan:M.olive); m.rotation.y=Math.PI; G3.scene.add(m); return {m,x0,len,y}; });
+    C.paxs=Array.from({length:8},(_,i)=>{ const m=g3bm(i%3?0x5f6b4a:0x7a7355,false); G3.scene.add(m); return {m,xl:lay.pax+(i>>1)*3.4,y:i&1?1.8:-1.8}; }); }
+  const deckAt=x=>{ for(const D of G3.cm.values()){ const q=D.cr, L=CRAFT[q.type].L; if(x>=q.x+4&&x<=q.x+L-2) return D.g.position.y+(q.type==='LCU'?8.7:D.top.position.y+2.6)+Math.tan(D.g.rotation.x)*(x-q.x); }
+    return x<WELL_X0?G3.rampZ(x):Z0; };
+  const xf=cr.xfer, sx=C.g.position.x, sz=C.g.position.z+cr.x;
+  const put=(o,xl,y,len,aboard,bit,speed,delay)=>{ let d=0, vis=!!aboard;
+    if(xf&&(xf.what&bit)){ const tt=xf.kind==='unload'?xf.t:xf.T-xf.t; d=Math.max(0,tt-delay)*speed; vis=cr.x+xl-d>457; }
+    o.m.visible=vis; if(!vis) return; const x=cr.x+xl-d, own=d<.01;
+    o.m.position.set(y+(own?sx:0),deckAt(x+len/2)+(len||own?0:Math.abs(Math.sin(t*6+xl))*.1),-(x+len)+(own?sz:0)); };
+  C.vehs.forEach((v,i)=>put(v,v.x0,v.y,v.len,cr.veh,1,6,i*14));
+  C.paxs.forEach((q,i)=>put(q,q.xl,q.y,0,cr.pax,2,4,(i>>1)*1.5));
+}
+// mooring lines from the wing wall catwalks to the LCU: three a side
+function g3lines(C){
+  const cr=C.cr; if(cr.type!=='LCU') return; const ZC=WW_CAT.z;
+  if(!C.lns){ const geo=G3.lineGeo||(G3.lineGeo=new THREE.CylinderGeometry(.17,.17,1,6)), mat=G3.lineMat||(G3.lineMat=g3m(0xd9d2b8,.9));
+    C.lns=Array.from({length:6},()=>{ const m=new THREE.Mesh(geo,mat); m.visible=false; G3.scene.add(m); return m; }); C.va=new THREE.Vector3(); C.vb=new THREE.Vector3(); C.vd=new THREE.Vector3(); }
+  const n=cr.lines||0, pt=Math.tan(C.g.rotation.x);
+  C.lns.forEach((m,k)=>{ m.visible=k<n; if(!m.visible) return; const sy=k&1?1:-1, xl=[16,67,118][k>>1];
+    const a=C.va.set(sy*25,ZC+.4,-(cr.x+xl)), b=C.vb.set(C.g.position.x+sy*13.4,C.g.position.y+13.2+pt*xl,C.g.position.z-xl), len=a.distanceTo(b);
+    m.position.copy(a).add(b).multiplyScalar(.5); m.scale.set(1,len,1); m.quaternion.setFromUnitVectors(G3.up,C.vd.copy(b).sub(a).normalize()); });
+}
 function g3poseCraft(C,cr,wz,seaZ,t,realDt){
   const sp=CRAFT[cr.type], Z0=WELL_FLOOR, xm=cr.x+sp.L/2, inW=x=>x<=LWL;
   const waterAt=x=>inW(x)?(S.hg>.02?wz(x,0):Z0-50):seaZ(x,0);
   const k=Math.min(1,realDt*2.5), docked=cr.state==='docked';
   if(cr.type==='LCU'){
-    const dr=cr.draft||CRAFT.LCU.loads.loaded.draft, wl=waterAt(xm), floating=(!cr.aground&&wl-dr>Z0-.01)||!inW(xm), bottom=floating?wl-dr:Z0;
-    C.zb=C.zb==null?bottom:C.zb+(bottom-C.zb)*k;
-    C.g.position.set(0,C.zb+(floating?Math.sin(t*1.1)*.12:0),-cr.x);
-    C.g.rotation.x=floating?Math.sin(t*.7)*.004:0; C.g.rotation.z=floating?Math.sin(t*.9+1)*.006:0;
+    // each end floats or rests on the deck on its own; a grounded craft sits still, a live one moves with the water until the lines check it
+    const dr=cr.draft||CRAFT.LCU.loads.loaded.draft, grounded=docked&&cr.afloat===false;
+    const zb=x=>grounded?Z0:Math.max(Z0,waterAt(x)-dr), zB=zb(cr.x+sp.L*.12), zS=zb(cr.x+sp.L*.88), pt=Math.atan((zS-zB)/(sp.L*.76));
+    C.zb=C.zb==null?zB:C.zb+(zB-C.zb)*k; C.pt=C.pt==null?pt:C.pt+(pt-C.pt)*k;
+    const sk=(G3_SEA[TUNE.sea]||G3_SEA.calm).k, amp=grounded?0:docked?(1-.85*(cr.lines||0)/6)*(.55+.45*sk):.25, ph=cr.id*1.9;
+    C.amp=C.amp==null?amp:C.amp+(amp-C.amp)*Math.min(1,realDt*.8); const a=C.amp;
+    C.g.position.set(Math.sin(t*.5+ph)*2.2*a,C.zb-Math.tan(C.pt)*sp.L*.12+Math.sin(t*1.1+ph)*.25*a,-cr.x+Math.sin(t*.37+ph*1.3)*2.4*a);
+    C.g.rotation.set(C.pt+Math.sin(t*.7+ph)*.006*a,Math.sin(t*.43+ph)*.02*a,Math.sin(t*.8+ph)*.03*a);
     const tgt=docked?1.62:.35; C.rp.rotation.x+=(tgt-C.rp.rotation.x)*Math.min(1,realDt*.6);
     C.radar.rotation.y=t*2.2;
   } else {
@@ -2346,12 +2390,12 @@ function g3frame(Wc,Hc,realDt,now){
   // vehicles, people, craft
   G3.veh.visible=!!(S.vehSide&&S.vehSide!=='none'); G3.veh.position.x=-(S.vehY||0);
   G3.bms.forEach((g,i)=>{ g.rotation.z=Math.sin(now/950+BMS[i].x*.37)*.03; });
-  const cr=S.craft;
-  if(!cr){ if(G3.craft){ G3.scene.remove(G3.craft.g); G3.craft=null; } }
-  else { const load=cr.load||(cr.draft&&cr.draft<5?'light':'loaded');
-    if(!G3.craft||G3.craft.type!==cr.type||G3.craft.load!==load){ if(G3.craft) G3.scene.remove(G3.craft.g);
-      G3.craft=cr.type==='LCU'?g3lcu(load):g3lcac(); G3.craft.type=cr.type; G3.craft.load=load; G3.scene.add(G3.craft.g); }
-    g3poseCraft(G3.craft,cr,wz,seaZ,t,realDt); if(G3.craft.anim) G3.craft.anim(t,realDt,cr); }
+  { const cm=G3.cm||(G3.cm=new Map()), live=new Set(S.crafts.map(q=>q.id));
+    for(const [id,C] of cm) if(!live.has(id)){ G3.scene.remove(C.g); for(const o of [...(C.vehs||[]),...(C.paxs||[])]) G3.scene.remove(o.m); for(const m of C.lns||[]) G3.scene.remove(m); cm.delete(id); }
+    for(const cr of S.crafts){ let C=cm.get(cr.id);
+      if(!C){ C=cr.type==='LCU'?g3lcu(cr.load||(cr.draft&&cr.draft<5?'light':'loaded')):g3lcac(); G3.scene.add(C.g); cm.set(cr.id,C); }
+      C.cr=cr; g3poseCraft(C,cr,wz,seaZ,t,realDt); if(C.anim) C.anim(t,realDt,cr); }
+    for(const C of cm.values()){ g3cargo(C,t); g3lines(C); } }
   r.render(G3.scene,cam);
 }
 const G3_SEA={calm:{roll:0,pitch:0,k:.5},slight:{roll:.4,pitch:.12,k:1},moderate:{roll:1.1,pitch:.3,k:1.6},rough:{roll:2.2,pitch:.6,k:2.4}};
@@ -2486,6 +2530,35 @@ $('#soundBtn').addEventListener('click',async()=>{
   try{ if(AUD.on) await AUD.ctx.resume(); else AUD.master.gain.setTargetAtTime(0,AUD.ctx.currentTime,.05); }catch(_){}
   b.textContent=AUD.on?'Sound on':'Sound off'; b.setAttribute('aria-pressed',String(AUD.on));
 });
+
+/* ---- securing craft with lines, and loading or unloading vehicles and personnel ---- */
+// cargo layout on each craft: vehicles as [x from the bow, length, y off centerline, 1 = truck], and where the troops stand
+const CARGO={LCU:{veh:[[24,22,0,1],[52,15.5,-4.6,0],[52,15.5,4.6,0],[74,15.5,-4.6,0],[74,15.5,4.6,0]],pax:92},LCAC:{veh:[[34,15.5,0,0]],pax:56}};
+const cargoName=w=>w===3?'vehicles and personnel':w===1?'vehicles':'personnel';
+function xferT(c,w){ const lay=CARGO[c.type]; let T=0;   // vehicles drive at 6 ft/s, 14 s apart; troops walk at 4 ft/s; to or from the forward end of the well
+  if(w&1) T=Math.max(T,(lay.veh.length-1)*14+(c.x+lay.veh[lay.veh.length-1][0]-456)/6);
+  if(w&2) T=Math.max(T,6+(c.x+lay.pax+11-456)/4);
+  return T+4; }
+$('#secureBtn').addEventListener('click',()=>{ const lc=S.crafts.filter(q=>q.type==='LCU'&&q.state==='docked');
+  if(!lc.length){ craftMsg('No LCU is in position to pass lines to.'); return; }
+  const rig=lc.some(q=>q.lineTgt<6);
+  if(!rig&&lc.some(q=>q.xfer)){ craftMsg('Keep the lines on while the craft is being loaded or unloaded.'); return; }
+  lc.forEach(q=>{ q.lineTgt=rig?6:0; });
+  log(rig?"Boatswain's Mates passing lines to the LCU: three a side, forward, midships and aft":'Casting off the LCU lines'); craftMsg(rig?'Passing lines. The craft steadies as each pair comes taut.':'Casting off lines.'); });
+function cargoGo(kind){ const what=+$('#cargoSel').value;
+  if(!S.crafts.length){ craftMsg('No craft in the well.'); return; }
+  if(S.crafts.some(q=>q.state!=='docked')){ craftMsg('A craft is moving. Wait until it is in position.'); return; }
+  if(S.crafts.some(q=>q.xfer)){ craftMsg('A craft is already being loaded or unloaded.'); return; }
+  if(S.walk){ craftMsg('FOD walkdown in progress: personnel are in the well deck.'); return; }
+  const has=q=>((what&1)&&q.veh)||((what&2)&&q.pax), lacks=q=>((what&1)&&!q.veh)||((what&2)&&!q.pax);
+  const c=S.crafts.find(kind==='unload'?has:lacks);
+  if(!c){ craftMsg(kind==='unload'?'None of that is aboard a craft in the well.':'Every craft in the well already has that aboard.'); return; }
+  if(c.type==='LCU'&&c.afloat&&c.lines<6){ craftMsg('Secure the LCU with lines, or ground it, before moving vehicles or personnel.'); return; }
+  const w=kind==='unload'?((what&1&&c.veh?1:0)|(what&2&&c.pax?2:0)):((what&1&&!c.veh?1:0)|(what&2&&!c.pax?2:0));
+  c.xfer={kind,what:w,t:0,T:xferT(c,w)};
+  log(`${kind==='unload'?'Unloading':'Loading'} ${c.type} ${S.crafts.indexOf(c)+1}: ${cargoName(w)}`); craftMsg(`${kind==='unload'?'Unloading':'Loading'} ${c.type} ${S.crafts.indexOf(c)+1}: about ${Math.ceil(c.xfer.T/60)} min.`); }
+$('#unloadBtn').addEventListener('click',()=>cargoGo('unload'));
+$('#loadBtn').addEventListener('click',()=>cargoGo('load'));
 
 /* ---- ship speed, wave-off and foreign objects ---- */
 $('#spdSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const k=+b.dataset.k; if(k===S.spdOrd) return;
@@ -2739,7 +2812,7 @@ function snapshot(){
     tk:S.tanks.map(t=>{const f=t.flags;return [Math.round(1000*t.V/t.cap),MI[t.mode]||0,r3(t.pos.sea),r3(t.pos.blow),r3(t.pos.fm),r3(t.pos.drain),Math.round(1000*tli(t)),
       (f.overflow?1:0)|(f.drainStall?2:0)|(f.blowThru?4:0)|(f.backflood?8:0)|(t.tliReported?16:0)|(t.tliChronic?32:0),t.tgt.fm?1:0,t.tgt.drain?1:0];}),
     db:S.dbac.map(c=>[SI[c.state]||0,c.loaded?1:0,Math.round(c.temp),(c.failed?1:0)|(c.lowOil?2:0)|(c.unloaderStuck?4:0)|(c.failing?8:0)|(c.unloaderShut?16:0),Math.round(c.tm)]),
-    cr:S.craft?[S.craft.type,Math.round(S.craft.x),S.craft.state,S.craft.aground?1:0,S.craft.draft||0]:0,
+    cr:S.crafts.map(q=>[q.type,Math.round(q.x),q.state,q.aground?1:0,q.draft||0,q.id,q.lines||0,q.veh?1:0,q.pax?1:0,q.afloat?1:0,q.xfer?[q.xfer.kind==='load'?1:0,q.xfer.what,Math.round(q.xfer.t),Math.round(q.xfer.T)]:0]),
     cs:S.cas.slice(-8).map(r=>[r.key,String(r.target||'').slice(0,24),Math.round(r.t0),r.tClr==null?-1:Math.round(r.tClr),r.hidden?1:0]),
     al:(S.curAlarms||[]).slice(0,6).map(([sv,m])=>[sv,String(m).slice(0,70)]),
     lg:S.log.slice(0,6).map(l=>[Math.round(l.t),String(l.msg).slice(0,90),l.sev||'']),
@@ -2765,7 +2838,9 @@ function applySnap(s){
     const b=N(a[7]); t.flags={overflow:!!(b&1),drainStall:!!(b&2),blowThru:!!(b&4),backflood:!!(b&8)}; t.tliReported=!!(b&16); t.tliChronic=!!(b&32);});
   if(Array.isArray(s.db)) S.dbac.forEach((c,i)=>{const a=s.db[i]; if(!Array.isArray(a)) return;
     c.state=ST_ARR[a[0]]||'off'; c.loaded=!!a[1]; c.temp=N(a[2]); const b=N(a[3]); c.failed=!!(b&1); c.lowOil=!!(b&2); c.unloaderStuck=!!(b&4); c.failing=!!(b&8); c.unloaderShut=!!(b&16); c.tm=N(a[4]);});
-  S.craft=Array.isArray(s.cr)&&CRAFT[s.cr[0]]?{type:s.cr[0],x:N(s.cr[1]),state:String(s.cr[2]),aground:!!s.cr[3],draft:N(s.cr[4])}:null;
+  S.crafts=(Array.isArray(s.cr)?s.cr:[]).filter(a=>Array.isArray(a)&&CRAFT[a[0]]).slice(0,3).map(a=>({type:a[0],x:N(a[1]),state:String(a[2]),aground:!!a[3],draft:N(a[4]),id:N(a[5]),lines:N(a[6]),lineTgt:N(a[6]),veh:a[7]?1:0,pax:a[8]?1:0,afloat:!!a[9],load:a[7]?'loaded':'light',
+    xfer:Array.isArray(a[10])?{kind:a[10][0]?'load':'unload',what:N(a[10][1]),t:N(a[10][2]),T:N(a[10][3])}:null}));
+  S.craft=S.crafts.find(q=>q.state!=='docked')||S.crafts[S.crafts.length-1]||null;
   if(Array.isArray(s.cs)) S.cas=s.cs.filter(a=>Array.isArray(a)&&CAS[a[0]]).map(a=>({key:a[0],name:CAS[a[0]].name,target:String(a[1]),t0:N(a[2]),tClr:N(a[3])<0?null:N(a[3]),hidden:!!a[4]}));
   S.mirAlarms=Array.isArray(s.al)?s.al.filter(Array.isArray).map(a=>[['alarm','caution'].includes(a[0])?a[0]:'caution',String(a[1])]):[];
   if(Array.isArray(s.lg)){ S.log=s.lg.filter(Array.isArray).map(a=>({t:N(a[0]),msg:String(a[1]),sev:['alarm','caution'].includes(a[2])?a[2]:''})); dirtyLog=true; }
