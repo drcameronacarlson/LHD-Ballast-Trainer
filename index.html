@@ -279,6 +279,7 @@ body.mode-instructor .mirrorNote{display:block}
   </section>
 
   <section class="readouts" aria-label="Ship condition">
+    <div class="ro" id="roS"><span class="k">Ship speed</span><span class="v">–</span><span class="s"></span></div>
     <div class="ro" id="roF"><span class="k">Draft fwd</span><span class="v">–</span><span class="s"></span></div>
     <div class="ro" id="roA"><span class="k">Draft aft</span><span class="v">–</span><span class="s"></span></div>
     <div class="ro" id="roT"><span class="k">Trim</span><span class="v">–</span><span class="s"></span></div>
@@ -321,6 +322,12 @@ body.mode-instructor .mirrorNote{display:block}
             <span class="wread" id="gateRead">0° closed</span>
           </div>
           <div class="wgrp">
+            <span class="wlbl">Ship speed</span>
+            <div class="seg" role="group" aria-label="Ordered ship speed" id="spdSeg">
+              <button data-k="0">Stop</button><button data-k="3">3 kts</button><button data-k="5">5 kts</button><button data-k="10">10 kts</button><button data-k="15">15 kts</button>
+            </div>
+          </div>
+          <div class="wgrp">
             <span class="wlbl">Craft</span>
             <div class="seg" role="group" aria-label="LCU load" id="lcuLoad">
               <button data-l="light" id="lcuLight">Light</button>
@@ -329,6 +336,7 @@ body.mode-instructor .mirrorNote{display:block}
             <button class="tbtn" id="bringLCU">Bring in LCU</button>
             <button class="tbtn" id="bringLCAC">Bring in LCAC</button>
             <button class="tbtn" id="launch">Launch craft</button>
+            <button class="tbtn" id="waveOff">Wave off</button>
           </div>
         </div>
         <div class="wgrp tune instrCtl">
@@ -398,7 +406,7 @@ body.mode-instructor .mirrorNote{display:block}
         <section class="card obj">
           <h2>Objective · wet well for LCU</h2>
           <div class="chips" id="objChips"></div>
-          <p class="note" id="objNote">Ballast down, lower the gate to 45° for the first water, open full at about 3 ft, and hold 8–10 ft at the gate with under 1° of list. Ballast only until the well reaches the depth you need, then put those tanks back in NORMAL. Secure a little early: the well keeps rising while valves close. Bring the LCU in, launch it, then deballast to a dry well. Expect a list as the well floods. Prestage the wing walls to 25–50% on both sides before you lower the gate: that leaves room to fill the high side, and water above sea level to drain from the low side.</p>
+          <p class="note" id="objNote">Slow to 5 kts or less first: the ship cannot ballast, recover or launch craft above that. Ballast down, lower the gate to 45° for the first water, open full at about 3 ft, and hold 8–10 ft at the gate with under 1° of list. Ballast only until the well reaches the depth you need, then put those tanks back in NORMAL. Secure a little early: the well keeps rising while valves close. Bring the LCU in, launch it, then deballast to a dry well. Expect a list as the well floods. Prestage the wing walls to 25–50% on both sides before you lower the gate: that leaves room to fill the high side, and water above sea level to drain from the low side.</p>
           <h2 style="margin-top:6px">Alarms</h2>
           <div class="chips" id="alarms"></div>
           <h2 style="margin-top:6px">Log</h2>
@@ -472,6 +480,11 @@ body.mode-instructor .mirrorNote{display:block}
               <button class="pb wide" data-act="localCtl">Man HPUs: local control</button>
               <button class="pb wide" data-act="restorePower">Electrical: restore power</button>
             </div>
+            <div class="casrow">
+              <span class="wlbl">Well deck</span>
+              <button class="pb wide" data-act="fodWalk">FOD walkdown</button>
+              <button class="pb wide" data-act="fodClear">Clear foreign objects</button>
+            </div>
             <p class="note" id="procErrs"></p>
             <p class="note">Start, stop and unloaders are on the Deballast air tab; taking the rapid tanks at the DCC is on the DCC ballast tab. Controlling actions are notional, drawn from public sources and a former LHD-5 ballast officer's experience. They are not the ship's EOCC or BOSS.</p>
           </div>
@@ -500,6 +513,7 @@ const LWL=778, WELL_FLOOR=29, WELL_X0=LWL-266, WELL_W=50;
 const PSI_FT=64/144, G=32.174, PATM=14.7, FT3_LT=35;
 const DT=0.05;               // physics step (s)
 const CD_SEA=0.25, CD_DRAIN=0.6;
+const SPD_MAX=5;             // max ship speed (kts) for ballasting and craft launch/recovery (user's recollection)
 const KB_AIR=2160/60/Math.sqrt(3); // scf/s per sqrt(psi) through a blow valve
 const VH=1500;               // blow header volume ft3
 const DBAC_SCFS=2160/60, RELIEF=20, START_T=12;
@@ -634,6 +648,7 @@ function init(){
   S.t=0; S.gate=false; S.firemain=true; S.wdControl=false;
   S.gateAng=0; S.gateTgt=0; S.wellV=0; S.hg=0; S.wellQ=0; S.craft=null; S.t45=null;
   S.tOver1=0; S.maxList=0; S.prestage=null; S.prestageNote='';
+  S.spd=10; S.spdOrd=10; S.fod=[]; S.fodFound=false; S.fodHit=false; S.fodWarned=false;
   rollList();
   S.Tf=27; S.Ta=28; S.list=0; S.gm=GM0; S.W=W0;
   S.mh=VH; S.Ph=0; S.relief=false;
@@ -669,6 +684,7 @@ const HCS=[
 
 function step(dt){
   S.t+=dt;
+  { const d=S.spdOrd-S.spd; if(d) S.spd+=Math.sign(d)*Math.min(Math.abs(d),.03*dt); }   // the ship answers the bell slowly: about 2 kts a minute
   const la=Math.abs(S.list||0); if(la>1) S.tOver1+=dt; if(la>S.maxList) S.maxList=la;
   // compressors
   let supply=0;
@@ -807,6 +823,7 @@ function solveAndReturn(){
 function log(msg,sev=''){S.log.unshift({t:S.t,msg,sev}); if(S.log.length>80) S.log.pop(); dirtyLog=true;}
 function setMode(t,mode){
   if(!t.blowT||t.mode===mode) return;
+  if(mode==='BALLAST'&&S.spd>SPD_MAX+.05){ log(`Ship speed ${fmt(S.spd,1)} kts: slow to ${SPD_MAX} kts or less before ballasting`,'caution'); return; }
   t.mode=mode; t.tgt.sea=MODES[mode].sea; t.tgt.blow=MODES[mode].blow; t.cmdT=S.t;
   log(`${t.id} → ${mode==='PRE'?'PRE DEBLST':mode}`);
   S.lastOrder=({BALLAST:'Ballasting',DEBLST:'Deballasting',PRE:'Pre-deballasting',NORMAL:'Securing'})[mode]+' '+t.id;
@@ -817,6 +834,10 @@ function toggleValve(t,k,label){t.tgt[k]=t.tgt[k]?0:1; t.cmdT=S.t; log(`${t.id} 
 const rnd=a=>a[Math.random()*a.length|0];
 const dbacOf=r=>S.dbac[+r.target.split('-')[1]-1];
 const liveDbac=()=>S.dbac.filter(c=>!c.failed&&!c.lowOil);
+// fire stations on the wing wall catwalks: one starboard, two port (user). Frame positions are estimates. sy: -1 = stbd, +1 = port (view y)
+const FIRE_ST=[{name:'starboard fire station',x:640,sy:-1},{name:'port forward fire station',x:590,sy:1},{name:'port aft fire station',x:705,sy:1}];
+const FOD_TY=['pallet','drum','chock','chain','cone'], FOD_NAME={pallet:'pallet',drum:'55-gallon drum',chock:'wheel chock',chain:'tie-down chain',cone:'safety cone'};
+const fodDesc=()=>S.fod.map(f=>f.k==='hose'?`fire hose hanging into the well from the ${FIRE_ST[f.st].name}`:`${FOD_NAME[f.ty]} adrift on the deck`).join('; ');
 const CAS={
   // --- DBACs (per user: unloader fails to close; low oil trip; failure while running -> unload, cool <100°F, stop)
   unloader:{name:'DBAC unloader valve fails to close',
@@ -868,6 +889,13 @@ const CAS={
       S.dbac.forEach(c=>{ if(c.state!=='off'){c.state='off'; c.loaded=false;} });
       return ''; },
     cleared:()=>!S.allPowerLost},
+  // --- well deck (per user): foreign objects matter for LCAC operations only. A hose hanging from a catwalk fire station, or loose gear.
+  fod:{name:'Foreign object in the well deck (LCAC ops)',
+    inject(){ S.fod=[]; S.fodFound=false;
+      if(Math.random()<.5){ const st=Math.random()*3|0; S.fod.push({k:'hose',st}); return 'fire hose, '+FIRE_ST[st].name; }
+      const n=1+(Math.random()*3|0); for(let i=0;i<n;i++) S.fod.push({k:'obj',ty:rnd(FOD_TY),x:Math.round(540+Math.random()*220),y:Math.round((Math.random()*2-1)*19)});
+      return n>1?n+' loose objects':FOD_NAME[S.fod[0].ty]; },
+    cleared:()=>!S.fod.length},
   condenser:{name:'Condensers air-bound from blow-through', auto:true,
     inject(){return '';}, cleared:()=>!S.condAirbound},
 };
@@ -878,6 +906,7 @@ function pickCasualty(){
     if(k==='dbacFail'||k==='lowOil'||k==='unloader') return running;
     if(k==='hdrRelief'||k==='hdrRupture') return loaded;
     if(k==='wdPower') return S.wdControl;
+    if(k==='fod') return !!(S.craft&&S.craft.type==='LCAC');
     return true;});
   return pref.length?rnd(pref):ok.length?rnd(ok):null;
 }
@@ -933,6 +962,12 @@ const ACT={
     localOp((S.dbacManned?0:120)+60,`DBAC operator to close DBAC-${c.n} unloaders manually`,()=>{c.unloaderStuck=false; log(`DBAC-${c.n} unloaders closed manually. Discharging to the main air header`);});},
   addOil(c){ if(!c.lowOil){log(`DBAC-${c.n}: lube oil level normal`);return;}
     localOp((S.dbacManned?0:120)+240,`Adding lube oil to DBAC-${c.n}`,()=>{c.lowOil=false; log(`DBAC-${c.n} oil topped off and reset. Available to start`);});},
+  fodWalk(){ localOp(180,'Well deck FOD walkdown started',()=>{
+    if(!S.fod.length){ log('FOD walkdown complete: well deck clear'); return; }
+    S.fodFound=true; log('FOD walkdown: '+fodDesc()+'. Well deck is fouled for LCAC operations','caution'); }); },
+  fodClear(){ if(!S.fod.length){ log('Nothing to clear: the well deck is clear'); return; }
+    if(!S.fodFound){ log('Nothing has been reported in the well. Do a FOD walkdown first'); return; }
+    localOp(150,S.fod.some(f=>f.k==='hose')?'Restowing the fire hose at the catwalk fire station':'Clearing loose gear from the well deck',()=>{ S.fod=[]; S.fodFound=false; log('Well deck clear of foreign objects'); }); },
   takeRapid(){ if(!S.wdControl){log('DCC already has the rapid ballast tanks');return;}
     if(!S.dccPower&&!S.localCtl){log('No power to DCC ballast section','caution');return;}
     S.wdControl=false; log('DCC has taken control of the rapid ballast tanks');},
@@ -1070,6 +1105,8 @@ $('#lcuLoad').addEventListener('click',e=>{const b=e.target.closest('button');if
 function bringCraft(type){
   const spec=CRAFT[type];
   if(S.craft){craftMsg(`The ${S.craft.type} is already in or at the well. Launch it first.`);return;}
+  if(S.spd>SPD_MAX+.05){craftMsg(`Ship speed ${fmt(S.spd,1)} kts: slow to ${SPD_MAX} kts or less to recover craft.`);return;}
+  if(type==='LCAC'&&S.fodFound&&S.fod.length){craftMsg('Well deck is fouled. Clear the foreign object before LCAC operations.');return;}
   if(S.gateAng<85){craftMsg(`Stern gate must be full down before the ${type} can enter.`);return;}
   const slope=Math.max((S.Ta-S.Tf)/LWL,1e-4);
   let park=WELL_X0+18, draft=0;
@@ -1087,6 +1124,8 @@ $('#bringLCAC').addEventListener('click',()=>bringCraft('LCAC'));
 $('#launch').addEventListener('click',()=>{const c=S.craft;
   if(!c||c.state!=='docked'){craftMsg('No craft secured in the well.');return;}
   if(S.gateAng<85){craftMsg('Lower the stern gate full down to launch.');return;}
+  if(S.spd>SPD_MAX+.05){craftMsg(`Ship speed ${fmt(S.spd,1)} kts: slow to ${SPD_MAX} kts or less to launch craft.`);return;}
+  if(c.type==='LCAC'&&S.fodFound&&S.fod.length){craftMsg('Well deck is fouled. Clear the foreign object before LCAC operations.');return;}
   if(c.type==='LCU'&&c.aground){craftMsg('LCU is aground. Add water to the well to float it before launching.');return;}
   if(c.type==='LCU'&&S.hg<CRAFT.LCU.loads[c.load].need){craftMsg(`Need ${CRAFT.LCU.loads[c.load].need} ft at the gate to launch a ${c.load} LCU; have ${fmt(S.hg,1)} ft.`);return;}
   c.state='launching'; log(`${c.type} launching`); craftMsg(`${c.type} backing out.`);
@@ -1371,6 +1410,8 @@ function render(){
   setRO('#roG',fmt(S.gm,1)+' ft',`solid ${fmt(S.gmSolid,1)} ft`,S.gm<2?'crit':S.gm<4?'warn':'');
   setRO('#roB',Math.round(S.bal).toLocaleString()+' LT',S.wellLT>1?`+ ${Math.round(S.wellLT).toLocaleString()} LT in well`:`${Math.round(S.bal*FT3_LT).toLocaleString()} ft³`);
   setRO('#roD',Math.round(S.W).toLocaleString()+' LT','long tons');
+  setRO('#roS',fmt(S.spd,1)+' kts',Math.abs(S.spdOrd-S.spd)>.05?`coming to ${S.spdOrd} kts`:`limit ${SPD_MAX} for well deck ops`,S.spd>SPD_MAX+.05?'warn':'good');
+  document.querySelectorAll('#spdSeg button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.k===S.spdOrd)));
 
   // well deck panel
   document.querySelectorAll('#pane-wd .wcol').forEach(c=>{const t=S.byId[c.dataset.t];paintLamps(c,t);
@@ -1406,7 +1447,7 @@ function render(){
   });
   const hp=$('#hdrP'); if(hp){hp.textContent=fmt(S.Ph,1)+' psig';$('#reliefLamp').classList.toggle('on',S.relief);$('#mannedLamp').classList.toggle('on',S.dbacManned);}
 
-  updateProfile(); updateStern(); updateIncl(); renderAlarms(); renderCas(); if(MODE!=='instructor') dccTick();
+  updateProfile(); updateStern(); updateIncl(); renderAlarms(); renderCas(); if(MODE!=='instructor'){ dccTick(); fodTick(); }
 }
 
 function renderAlarms(){
@@ -1427,6 +1468,9 @@ function renderAlarms(){
     if(t.flags.backflood) A.push(['caution',`${t.id} flooding in on DEBLST: tank not pressurized`]);
   }
   if(S.relief) A.push(['caution','DBAC relief lifting']);
+  if(S.spd>SPD_MAX+.05&&((S.craft&&S.craft.state!=='docked')||S.tanks.some(t=>t.mode==='BALLAST'))) A.push(['caution',`Ship at ${fmt(S.spd,1)} kts during well deck operations (limit ${SPD_MAX})`]);
+  if(S.fod.length&&S.fodFound) A.push(['caution','Well deck fouled: foreign object']);
+  if(S.fodHit) A.push(['alarm','LCAC foreign object damage']);
   // casualty symptoms (what the operator would actually see)
   if(!S.dccPower) A.push(['alarm',S.localCtl?'DCC ballast section power lost: local control':'DCC ballast section power lost']);
   if(!S.firemain) A.push(['caution','Firemain pressure low']);
@@ -1452,7 +1496,7 @@ function renderAlarms(){
   const w=S.tanks.filter(t=>t.g==='wing'), wr=w.map(t=>t.V/t.cap), wOK=wr.every(f=>f>=.2&&f<=.55);
   const pre=S.prestage==null?`<span class="chip ${wOK?'ok':''}">Wing walls ${Math.round(Math.min(...wr)*100)}–${Math.round(Math.max(...wr)*100)}% · prestage 25–50</span>`
     :`<span class="chip ${S.prestage?'ok':'caution'}">${S.prestageNote}</span>`;
-  $('#objChips').innerHTML=pre+`<span class="chip ${ok3?'ok':''}">Gate ${Math.round(S.gateAng)}°</span><span class="chip ${ok1?'ok':''}">Well ${S.hg>.05?fmt(S.hg,1)+' ft':'dry'} · target 8–10</span><span class="chip ${ok2?'ok':'caution'}">List ${fmt(la,1)}° · limit 1°</span><span class="chip ${S.tOver1<1?'ok':S.tOver1>600?'alarm':'caution'}">Over 1°: ${hms(S.tOver1).slice(3)}</span><span class="chip ${S.maxList<=1?'ok':S.maxList>3?'alarm':'caution'}">Max ${fmt(S.maxList,1)}°</span>${S.craft?`<span class="chip ${S.craft.state==='docked'&&!S.craft.aground?'ok':'caution'}">${S.craft.type} ${S.craft.aground?'aground':S.craft.state}</span>`:''}`;
+  $('#objChips').innerHTML=`<span class="chip ${S.spd<=SPD_MAX+.05?'ok':'caution'}">Speed ${fmt(S.spd,1)} kts · limit ${SPD_MAX}</span>`+pre+`<span class="chip ${ok3?'ok':''}">Gate ${Math.round(S.gateAng)}°</span><span class="chip ${ok1?'ok':''}">Well ${S.hg>.05?fmt(S.hg,1)+' ft':'dry'} · target 8–10</span><span class="chip ${ok2?'ok':'caution'}">List ${fmt(la,1)}° · limit 1°</span><span class="chip ${S.tOver1<1?'ok':S.tOver1>600?'alarm':'caution'}">Over 1°: ${hms(S.tOver1).slice(3)}</span><span class="chip ${S.maxList<=1?'ok':S.maxList>3?'alarm':'caution'}">Max ${fmt(S.maxList,1)}°</span>${S.craft?`<span class="chip ${S.craft.state==='docked'&&!S.craft.aground?'ok':'caution'}">${S.craft.type} ${S.craft.aground?'aground':S.craft.state}</span>`:''}`;
   if(dirtyLog){$('#log').innerHTML=S.log.slice(0,40).map(l=>`<li class="${l.sev}"><time>${hms(l.t)}</time><span>${l.msg}</span></li>`).join('');dirtyLog=false;}
 }
 
@@ -1658,6 +1702,9 @@ function drawWell(realDt,now){
       fill([P(x0,y0+1,Z0+h*.55),P(x0,y0+w-1,Z0+h*.55),P(x0,y0+w-1,Z0+h*.85),P(x0,y0+1,Z0+h*.85)],'rgba(30,38,40,.8)');
     }
   }
+  // foreign objects (casualty): a hanging fire hose or loose gear on the deck
+  for(const fo of S.fod||[]){ if(fo.k==='hose'){ const st=FIRE_ST[fo.st]; line(P(st.x,st.sy*25,ZC),P(st.x+2,st.sy*24.4,ZC-13),'#c9b27a',2); }
+    else if(fo.x>CAM.x+10){ const [u,v]=P(fo.x,fo.y,Z0+1), rr=Math.max(2,f*1.2/(fo.x-CAM.x)); c.fillStyle='#b5762f'; c.fillRect(u-rr,v-rr,2*rr,2*rr); } }
   // catwalk railings (inboard edge of each wing wall)
   for(const y of [YL,YR]){
     for(let x=XF+4;x<XA;x+=9) line(P(x,y,ZC),P(x,y,ZC+3.6),'#b9beba',1.2);
@@ -1775,7 +1822,7 @@ float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(
 float fbm(vec2 p){float a=0.5,s=0.0;for(int i=0;i<4;i++){s+=a*noise(p);p=p*2.03+vec2(17.0,9.0);a*=0.5;}return s;}`;
 const G3_WVERT=`attribute float aDepth;varying vec3 vW;varying float vDepth;
 void main(){vDepth=aDepth;vec4 w=modelMatrix*vec4(position,1.0);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`;
-const G3_WFRAG=`uniform float uTime,uInside,uFlow,uJets,uOpen,uTipX,uGateTop,uDay,uSea,uHaze;uniform vec3 uSun,uSkyTop,uSkyHor,uLamp,uSunCol,uSeaCol;
+const G3_WFRAG=`uniform float uTime,uInside,uFlow,uJets,uOpen,uTipX,uGateTop,uDay,uSea,uHaze,uShip,uKts;uniform vec3 uSun,uSkyTop,uSkyHor,uLamp,uSunCol,uSeaCol;
 varying vec3 vW;varying float vDepth;
 ${G3_NOISE}
 void wv(inout vec2 g,vec2 p,float t,vec2 d,float f,float sp,float a){float ph=dot(d,p)*f+t*sp;g+=d*(a*f*cos(ph));}
@@ -1813,6 +1860,7 @@ void main(){
     col=mix(col,vec3(0.8,0.86,0.86)*(0.08+0.32*uDay+0.9*dayl)+uLamp*0.18,foam);alpha=max(alpha,foam);
   }else{
     if(abs(vW.x)<25.0&&x<uTipX)discard;
+    p.y-=uShip;
     wv(g,p,uTime,vec2(0.3,0.95),0.11,0.75,0.5);wv(g,p,uTime,vec2(-0.5,0.87),0.19,1.0,0.3);
     wv(g,p,uTime,vec2(0.9,0.44),0.37,1.5,0.14);wv(g,p,uTime,vec2(-0.8,-0.6),0.8,2.1,0.06);wv(g,p,uTime,vec2(0.1,-1.0),1.7,2.8,0.025);
     float dist=length(cameraPosition-vW);
@@ -1823,6 +1871,8 @@ void main(){
     vec3 sky=mix(uSkyHor,uSkyTop,pow(clamp(R.y,0.0,1.0),0.5));
     float sd=max(dot(R,uSun),0.0);
     col=mix(uSeaCol,sky,F)+uSunCol*(pow(sd,300.0)*5.0+pow(sd,20.0)*0.3);float wc=smoothstep(0.74,0.92,fbm(p*0.05+vec2(uTime*0.04,0.0))+(uSea-1.6)*0.14)*step(1.3,uSea);col=mix(col,vec3(0.85,0.88,0.9)*(0.06+0.94*uDay),wc*0.8);
+    float wk=smoothstep(0.0,50.0,x-778.0)*exp(-(x-778.0)/(260.0+uKts*40.0))*smoothstep(36.0+0.12*(x-778.0),16.0,abs(vW.x))*min(1.0,uKts/8.0);
+    float wf=smoothstep(0.35,0.75,fbm(p*0.12)+wk*0.6-0.25)*wk;col=mix(col,vec3(0.86,0.9,0.92)*(0.06+0.94*uDay),clamp(wf*1.5,0.0,0.9));
     col=mix(col,uSkyHor*0.92,1.0-exp(-dist/uHaze));
   }
   gl_FragColor=vec4(col,alpha);
@@ -1938,7 +1988,7 @@ function g3build(){
   const wg=new THREE.BufferGeometry();wg.setAttribute('position',new THREE.Float32BufferAttribute(wp,3));
   wg.setAttribute('aDepth',new THREE.Float32BufferAttribute(new Float32Array((NX+1)*(NY+1)),1));wg.setIndex(wi);
   const skyTop=G3.skyTop=new THREE.Color(), skyHor=G3.skyHor=new THREE.Color(); G3.lampCol=new THREE.Color(); G3.sunCol=new THREE.Color(); G3.seaCol=new THREE.Color(); G3.cloudCol=new THREE.Color();
-  const wun=inside=>({uTime:{value:0},uInside:{value:inside},uFlow:{value:0},uJets:{value:0},uOpen:{value:0},uTipX:{value:XA},uGateTop:{value:ZT},uSun:{value:G3.sunShip},uSkyTop:{value:skyTop},uSkyHor:{value:skyHor},uDay:{value:1},uSea:{value:1},uHaze:{value:3000},uLamp:{value:G3.lampCol},uSunCol:{value:G3.sunCol},uSeaCol:{value:G3.seaCol}});
+  const wun=inside=>({uTime:{value:0},uInside:{value:inside},uFlow:{value:0},uJets:{value:0},uOpen:{value:0},uTipX:{value:XA},uGateTop:{value:ZT},uSun:{value:G3.sunShip},uSkyTop:{value:skyTop},uSkyHor:{value:skyHor},uDay:{value:1},uSea:{value:1},uShip:{value:0},uKts:{value:0},uHaze:{value:3000},uLamp:{value:G3.lampCol},uSunCol:{value:G3.sunCol},uSeaCol:{value:G3.seaCol}});
   G3.wMat=new THREE.ShaderMaterial({uniforms:wun(1),vertexShader:G3_WVERT,fragmentShader:G3_WFRAG,transparent:true,depthWrite:false,side:THREE.DoubleSide});
   G3.water=new THREE.Mesh(wg,G3.wMat); G3.water.frustumCulled=false; G3.water.renderOrder=2; sc.add(G3.water);
   const sg=new THREE.PlaneGeometry(16000,7000); sg.rotateX(-Math.PI/2); sg.setAttribute('aDepth',new THREE.Float32BufferAttribute([10,10,10,10],1));
@@ -1959,6 +2009,11 @@ function g3build(){
   G3.wetD=g3quad(z,z,z,z,new THREE.MeshStandardMaterial({color:0x0a0d0e,transparent:true,opacity:.5,roughness:.1,metalness:0,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}),{});
   G3.wetD.frustumCulled=false; G3.wetD.geometry.attributes.normal.array.set([0,1,0,0,1,0,0,1,0,0,1,0]);
 
+  // ---- fire stations on the wing wall catwalks, and the foreign-object casualty props ----
+  { const mRed=std({color:0xa3261c,roughness:.6}); M.tanHose=std({color:0xc8b07a,roughness:.9});
+    for(const st of FIRE_ST){ g3box(sc,st.x-1.6,st.x+1.6,st.sy*30.9,st.sy*29.9,ZC+1,ZC+5.5,mRed,false);
+      const reel=new THREE.Mesh(new THREE.TorusGeometry(1.1,.38,8,18),M.tanHose); reel.rotation.y=Math.PI/2; reel.position.copy(g3v(st.x,st.sy*29.6,ZC+3.2)); sc.add(reel); }
+    G3.fodG=new THREE.Group(); sc.add(G3.fodG); G3.fodSig=''; }
   // ---- people and vehicles ----
   G3.bms=BMS.map(bm=>{const g=g3bm(bm.vest,bm.caller);g.position.copy(g3v(bm.x,bm.y,ZC));g.rotation.y=bm.y<0?Math.PI/2:-Math.PI/2;sc.add(g);return g;});
   G3.veh=new THREE.Group(); sc.add(G3.veh);
@@ -2123,9 +2178,45 @@ function g3lcac(){
     for(const o of[-2.6,2.6]) g3box(top,82.8,84.8,cx+o-.2,cx+o+.2,10.4,24.6,M.hull);
   }
   const hv=g3hmv(M.tan); hv.rotation.y=Math.PI; hv.position.copy(g3v(34+15.5,0,2.6)); top.add(hv);
-  const pg=new THREE.BufferGeometry(); pg.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(260*3),3));
-  const spray=new THREE.Points(pg,new THREE.PointsMaterial({color:0xeef4f6,size:3.4,map:G3.dotTex,transparent:true,opacity:.5,depthWrite:false})); spray.frustumCulled=false; g.add(spray);
-  return {g,top,skirt,props,spray,zb:null,sk:1,spin:0,anim(t,dt,cr){ radar.rotation.y=t*2.5; spray.material.color.setScalar(.2+.75*G3.L.day); const tg=cr.state==='docked'?1.6:.26; ramp.rotation.x+=(tg-ramp.rotation.x)*Math.min(1,dt*.5); }};
+  // spray: droplets thrown out by the skirt and torn off the surface by the propeller wash, plus a drifting mist. Only over water.
+  const NS=520, NM=110, sp=new Float32Array(NS*3), sv=new Float32Array(NS*3), sl=new Float32Array(NS), mp=new Float32Array(NM*3), mv=new Float32Array(NM*3), ml=new Float32Array(NM);
+  for(let i=0;i<NS;i++) sp[i*3+1]=-999; for(let i=0;i<NM;i++) mp[i*3+1]=-999;
+  const mkPts=(arr,size,op)=>{ const gg=new THREE.BufferGeometry(); gg.setAttribute('position',new THREE.BufferAttribute(arr,3));
+    const pts=new THREE.Points(gg,new THREE.PointsMaterial({color:0xeef4f6,size,map:G3.dotTex,transparent:true,opacity:op,depthWrite:false})); pts.frustumCulled=false; pts.renderOrder=5; g.add(pts); return pts; };
+  const spray=mkPts(sp,2.6,.55), mist=mkPts(mp,20,.085);
+  let si=0, mi=0, sAcc=0, mAcc=0;
+  const wetAt=(xl,cr)=>cr.x+xl>LWL?1:Math.min(1,Math.max(0,S.hg)*1.5)*.5;   // open sea: full spray; inside the well: only if the deck is wet
+  const emit=(xl,yl,zl,vx,vy,vz,life)=>{ const k=si*3; sp[k]=yl; sp[k+1]=zl; sp[k+2]=-xl; sv[k]=vy; sv[k+1]=vz; sv[k+2]=-vx; sl[si]=life; si=(si+1)%NS; };
+  const puff=(xl,yl,zl,vx,vy,vz,life)=>{ const k=mi*3; mp[k]=yl; mp[k+1]=zl; mp[k+2]=-xl; mv[k]=vy; mv[k+1]=vz; mv[k+2]=-vx; ml[mi]=life; mi=(mi+1)%NM; };
+  return {g,top,skirt,props,spray,zb:null,sk:1,spin:0,anim(t,dt,cr){ radar.rotation.y=t*2.5;
+    const dayc=.2+.75*G3.L.day, pw=this.spin, r=Math.random; spray.material.color.setScalar(dayc); mist.material.color.setScalar(dayc);
+    if(pw>.05){ sAcc+=dt*420*pw; mAcc+=dt*22*pw;
+      while(sAcc>1){ sAcc--;
+        if(r()<.45){ const e=r()*4|0, a=r(); let xl,yl,ox=0,oy=0;   // skirt edge: thrown outward and up
+          if(e===0){xl=0;yl=(a*2-1)*23;ox=-1;} else if(e===1){xl=88;yl=(a*2-1)*23;ox=1;} else {xl=a*88;yl=(e===2?-1:1)*23.5;oy=e===2?-1:1;}
+          if(r()<wetAt(xl,cr)) emit(xl,yl,.4,ox*(6+r()*10),oy*(6+r()*10)+(r()-.5)*4,5+r()*9,.7+r()*.9);
+        } else { const sy=r()<.5?-1:1, xl=90+r()*14, yl=sy*13.2+(r()-.5)*12;   // propeller wash: blown aft and up
+          if(r()<wetAt(xl,cr)) emit(xl,yl,.5+r()*2,28+r()*34,(r()-.5)*10+sy*3,7+r()*16,1+r()*1.3); } }
+      while(mAcc>1){ mAcc--; const sy=r()<.5?-1:1, xl=92+r()*26; if(r()<wetAt(xl,cr)) puff(xl,sy*13+(r()-.5)*16,3+r()*6,14+r()*14,(r()-.5)*5,3+r()*4,2.2+r()*1.8); } }
+    for(let i=0;i<NS;i++){ if(sl[i]<=0) continue; const k=i*3; sl[i]-=dt; sv[k+1]-=30*dt; sp[k]+=sv[k]*dt; sp[k+1]+=sv[k+1]*dt; sp[k+2]+=sv[k+2]*dt; if(sl[i]<=0||sp[k+1]<-.5){ sl[i]=0; sp[k+1]=-999; } }
+    for(let i=0;i<NM;i++){ if(ml[i]<=0) continue; const k=i*3; ml[i]-=dt; mv[k]*=1-.6*dt; mv[k+2]*=1-.6*dt; mp[k]+=mv[k]*dt; mp[k+1]+=mv[k+1]*dt; mp[k+2]+=mv[k+2]*dt; if(ml[i]<=0) mp[k+1]=-999; }
+    spray.geometry.attributes.position.needsUpdate=true; mist.geometry.attributes.position.needsUpdate=true; const tg=cr.state==='docked'?1.6:.26; ramp.rotation.x+=(tg-ramp.rotation.x)*Math.min(1,dt*.5); }};
+}
+function g3fod(fo){
+  const g=new THREE.Group(), M=G3.M, Z0=WELL_FLOOR, ZC=WW_CAT.z; g.userData=Object.assign({},fo);
+  if(fo.k==='hose'){ const st=FIRE_ST[fo.st], sy=st.sy;
+    const pts=[g3v(st.x,sy*29.6,ZC+2.4),g3v(st.x+.4,sy*27.5,ZC+.35),g3v(st.x+1,sy*25.3,ZC+.3),g3v(st.x+1.4,sy*24.5,ZC-1.2),g3v(st.x+1.8,sy*24.3,ZC-7),g3v(st.x+2,sy*24.2,ZC-13.5)];
+    const tube=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,.3,8,false),M.tanHose); tube.castShadow=true; g.add(tube);
+    const nz=new THREE.Mesh(new THREE.CylinderGeometry(.22,.42,1.4,10),M.brass||(M.brass=g3m(0xb08a3a,.35,{metalness:.7}))); nz.position.copy(pts[5]); nz.position.y-=.7; g.add(nz);
+    return g; }
+  const q=g3v(fo.x,fo.y,0); g.position.set(q.x,Z0,q.z); g.rotation.y=fo.x*1.7; g.userData.float=fo.ty==='pallet'||fo.ty==='drum'||fo.ty==='cone';
+  const add=(geo,mat,y)=>{ const m=new THREE.Mesh(geo,mat); m.position.y=y; m.castShadow=true; m.receiveShadow=true; g.add(m); return m; };
+  if(fo.ty==='pallet'){ add(new THREE.BoxGeometry(4,.3,4),M.wood,.6); for(const x of[-1.6,0,1.6]) add(new THREE.BoxGeometry(.5,.45,4),M.wood,.23).position.x=x; }
+  else if(fo.ty==='drum'){ add(new THREE.CylinderGeometry(1,1,2.9,16),M.drum||(M.drum=g3m(0x2d5f9a,.5)),1).rotation.z=Math.PI/2; }
+  else if(fo.ty==='chock') add(new THREE.BoxGeometry(1.8,1,1),M.chock||(M.chock=g3m(0xd9b312,.7)),.5);
+  else if(fo.ty==='chain') add(new THREE.CylinderGeometry(1.4,1.4,.35,14),M.dark,.18);
+  else add(new THREE.ConeGeometry(.75,2.3,12),M.orange,1.15);
+  return g;
 }
 function g3poseCraft(C,cr,wz,seaZ,t,realDt){
   const sp=CRAFT[cr.type], Z0=WELL_FLOOR, xm=cr.x+sp.L/2, inW=x=>x<=LWL;
@@ -2146,11 +2237,6 @@ function g3poseCraft(C,cr,wz,seaZ,t,realDt){
     C.g.position.set(0,C.zb+(docked?0:Math.sin(t*2.3)*.08),-cr.x);
     C.spin+=((docked?0:1)-C.spin)*Math.min(1,realDt*.5);
     for(const p of C.props) p.rotation.z+=realDt*38*C.spin;
-    const wet=!docked&&wl>Z0-1, pos=C.spray.geometry.attributes.position; C.spray.visible=wet;
-    if(wet) for(let i=0;i<260;i++){ const u=Math.random(), o=Math.random()*7, h=Math.random()*Math.random()*5; let x,y;
-      if(i%4===0){x=-o;y=(u*2-1)*23;} else if(i%4===1){x=88+o;y=(u*2-1)*23;} else {x=u*88;y=(i%4===2?-1:1)*(23.5+o);}
-      pos.setXYZ(i,y,h,-x); }
-    pos.needsUpdate=true;
   }
 }
 function g3frame(Wc,Hc,realDt,now){
@@ -2183,8 +2269,9 @@ function g3frame(Wc,Hc,realDt,now){
         if(open){ const kk=full?sstep(XA-14,Math.max(tipX,XA+1),x):sstep(XA-8,XA+4,x)*sstep(19,25,Math.abs(y)); h+=(seaZ(x,y)-h)*kk; }
         pos.setY(i,h-.03); dep.setX(i,x>XA?Math.max(h-Z0,.6):h-fl); } }
     pos.needsUpdate=true; dep.needsUpdate=true; }
+  G3.shipOff=((G3.shipOff||0)+(S.spd||0)*1.688*realDt)%100000;   // sea slides aft as the ship makes way
   const fl=Math.max(-1,Math.min(1,S.wellQ/2500));
-  for(const m of[G3.wMat,G3.sMat]){ const u=m.uniforms; u.uTime.value=t; u.uSea.value=SEA.k; u.uFlow.value=fl; u.uJets.value=open&&!full?1:0; u.uOpen.value=day; u.uTipX.value=tipX; u.uGateTop.value=Math.max(Z0,tipZ); }
+  for(const m of[G3.wMat,G3.sMat]){ const u=m.uniforms; u.uTime.value=t; u.uShip.value=G3.shipOff; u.uKts.value=S.spd||0; u.uSea.value=SEA.k; u.uFlow.value=fl; u.uJets.value=open&&!full?1:0; u.uOpen.value=day; u.uTipX.value=tipX; u.uGateTop.value=Math.max(Z0,tipZ); }
   G3.skyMat.uniforms.uTime.value=t;
   // wet marks: the highest water recently reached, drying slowly in simulation time
   if(S.t<G3.lastT-1) G3.wetHg=S.hg;
@@ -2207,6 +2294,11 @@ function g3frame(Wc,Hc,realDt,now){
       if(n<900){ const zs=S.hg>.02?Math.max(Z0,wz(p.x,p.y)):Z0+.2; fp.setXYZ(n++,p.y,Math.min(p.z,zs)+.3,-p.x); } }
     if(foam.length>900) foam.splice(0,foam.length-900);
     fp.needsUpdate=true; G3.foamPts.geometry.setDrawRange(0,n); }
+  // foreign objects: rebuild when the casualty changes; wood, drums and cones float when the well floods
+  { const sig=JSON.stringify(S.fod||[]);
+    if(sig!==G3.fodSig){ G3.fodSig=sig; while(G3.fodG.children.length) G3.fodG.remove(G3.fodG.children[0]); for(const fo of S.fod||[]) G3.fodG.add(g3fod(fo)); }
+    for(const o of G3.fodG.children){ const u=o.userData; if(u.k!=='obj') continue; const wl=S.hg>.02?wz(u.x,u.y):-1e9, fl=u.float&&wl>Z0+.3;
+      o.position.y=fl?wl-.35+Math.sin(t*1.3+u.x)*.08:Z0; o.rotation.z=fl?Math.sin(t*.9+u.y)*.05:0; } }
   // vehicles, people, craft
   G3.veh.visible=!!(S.vehSide&&S.vehSide!=='none'); G3.veh.position.x=-(S.vehY||0);
   G3.bms.forEach((g,i)=>{ g.rotation.z=Math.sin(now/950+BMS[i].x*.37)*.03; });
@@ -2350,6 +2442,18 @@ $('#soundBtn').addEventListener('click',async()=>{
   try{ if(AUD.on) await AUD.ctx.resume(); else AUD.master.gain.setTargetAtTime(0,AUD.ctx.currentTime,.05); }catch(_){}
   b.textContent=AUD.on?'Sound on':'Sound off'; b.setAttribute('aria-pressed',String(AUD.on));
 });
+
+/* ---- ship speed, wave-off and foreign objects ---- */
+$('#spdSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const k=+b.dataset.k; if(k===S.spdOrd) return;
+  S.spdOrd=k; log(`Bridge: ${k===0?'all stop':'making turns for '+k+' kts'} (now ${fmt(S.spd,1)} kts)`); });
+$('#waveOff').addEventListener('click',()=>{ const c=S.craft; if(!c||c.state!=='entering'){ craftMsg('No craft inbound to wave off.'); return; }
+  if(c.x<LWL-CRAFT[c.type].L*.5){ craftMsg(`${c.type} is too far into the well to wave off.`); return; }
+  c.state='launching'; log(`${c.type} waved off`,'caution'); craftMsg(`${c.type} waved off and backing clear.`); });
+function fodTick(){ const c=S.craft; if(!c){ S.fodHit=false; S.fodWarned=false; return; }
+  if(c.type!=='LCAC'||!S.fod.length||c.state==='docked') return;
+  if(!S.fodWarned&&c.state==='entering'&&c.x<LWL+70){ S.fodWarned=true; radioCall('Foul deck! Foreign object in the well',performance.now()); }
+  if(!S.fodHit&&c.x<LWL-12){ S.fodHit=true; log('LCAC struck a foreign object in the well: skirt and propeller damage','alarm');
+    procErr('LCAC moved in a fouled well deck: do a FOD walkdown and clear it before LCAC operations'); } }
 
 /* ---- radio: spoken calls with squelch, reports to DC Central with repeat-back, main air header pressure calls ---- */
 const RQ={q:[],busy:false}, RL=[];
@@ -2597,7 +2701,8 @@ function snapshot(){
     lg:S.log.slice(0,6).map(l=>[Math.round(l.t),String(l.msg).slice(0,90),l.sev||'']),
     pe:[S.procErrs.length,String((S.procErrs[S.procErrs.length-1]||{}).msg||'').slice(0,90)],
     tu:[TUNE.gap,TUNE.list,TUNE.veh,TUNE.tliChronic,S.casHide?1:0,S.casAuto?1:0,TUNE.sea,TUNE.light],
-    ps:[S.prestage==null?-1:S.prestage?1:0,String(S.prestageNote||'').slice(0,50)]};
+    ps:[S.prestage==null?-1:S.prestage?1:0,String(S.prestageNote||'').slice(0,50)],
+    vk:[r3(S.spd),S.spdOrd], fo:[S.fodFound?1:0,S.fodHit?1:0,S.fod.map(f=>f.k==='hose'?[0,f.st]:[1,FOD_TY.indexOf(f.ty),f.x,f.y])]};
   // presence is capped at 4 KiB: trim the log and alarms if needed
   let j=JSON.stringify(s); while(new TextEncoder().encode(j).length>3700&&(s.lg.length||s.al.length)){ if(s.lg.length) s.lg.pop(); else s.al.pop(); j=JSON.stringify(s); }
   return s;
@@ -2622,6 +2727,9 @@ function applySnap(s){
   if(Array.isArray(s.lg)){ S.log=s.lg.filter(Array.isArray).map(a=>({t:N(a[0]),msg:String(a[1]),sev:['alarm','caution'].includes(a[2])?a[2]:''})); dirtyLog=true; }
   if(Array.isArray(s.pe)){ const n=Math.max(0,N(s.pe[0])|0), m=String(s.pe[1]||''); S.procErrs=Array.from({length:Math.min(n,99)},()=>({msg:m})); }
   if(Array.isArray(s.ps)){ S.prestage=N(s.ps[0])<0?null:!!s.ps[0]; S.prestageNote=String(s.ps[1]||''); }
+  if(Array.isArray(s.vk)){ S.spd=N(s.vk[0]); S.spdOrd=N(s.vk[1]); }
+  if(Array.isArray(s.fo)){ S.fodFound=!!s.fo[0]; S.fodHit=!!s.fo[1];
+    S.fod=(Array.isArray(s.fo[2])?s.fo[2]:[]).filter(Array.isArray).slice(0,4).map(a=>a[0]===0?{k:'hose',st:Math.min(2,Math.max(0,N(a[1])|0))}:{k:'obj',ty:FOD_TY[N(a[1])|0]||'pallet',x:N(a[2]),y:N(a[3])}); }
   // keep the instructor's controls showing the trainee's actual settings (not while being edited)
   if(Array.isArray(s.tu)){ const [g,l,v,tc,h,au,se,li]=s.tu, act=document.activeElement, setv=(id,val)=>{const e=$(id); if(e&&e!==act) e.value=val;};
     if(+g>0){ setv('#gapTune',g); if($('#gapTune')!==act) $('#gapRead').textContent=`Cd ${(+g).toFixed(2)}`; }
