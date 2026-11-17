@@ -465,6 +465,7 @@ body.mode-instructor .mirrorNote{display:block}
               <label class="wlbl" for="actDbac">DBAC</label><select id="actDbac"></select>
               <button class="pb wide" data-act="askDbac">Ask operator for status</button>
               <button class="pb wide" data-act="closeUnloader">Close unloaders manually</button>
+              <button class="pb wide" data-act="openUnloader">Open unloaders manually</button>
               <button class="pb wide" data-act="addOil">Add lube oil &amp; reset</button>
             </div>
             <div class="casrow">
@@ -482,11 +483,10 @@ body.mode-instructor .mirrorNote{display:block}
             </div>
             <div class="casrow">
               <span class="wlbl">Well deck</span>
-              <button class="pb wide" data-act="fodWalk">FOD walkdown</button>
-              <button class="pb wide" data-act="fodClear">Clear foreign objects</button>
+              <button class="pb wide" data-act="fodWalk">FOD walkdown (find and clear)</button>
             </div>
             <p class="note" id="procErrs"></p>
-            <p class="note">Start, stop and unloaders are on the Deballast air tab; taking the rapid tanks at the DCC is on the DCC ballast tab. Controlling actions are notional, drawn from public sources and a former LHD-5 ballast officer's experience. They are not the ship's EOCC or BOSS.</p>
+            <p class="note">Start and stop are on the Deballast air tab; the unloaders follow the tank mode buttons; taking the rapid tanks at the DCC is on the DCC ballast tab. Controlling actions are notional, drawn from public sources and a former LHD-5 ballast officer's experience. They are not the ship's EOCC or BOSS.</p>
           </div>
         </div>
       </section>
@@ -648,7 +648,7 @@ function init(){
   S.t=0; S.gate=false; S.firemain=true; S.wdControl=false;
   S.gateAng=0; S.gateTgt=0; S.wellV=0; S.hg=0; S.wellQ=0; S.craft=null; S.t45=null;
   S.tOver1=0; S.maxList=0; S.prestage=null; S.prestageNote='';
-  S.spd=10; S.spdOrd=10; S.fod=[]; S.fodFound=false; S.fodHit=false; S.fodWarned=false;
+  S.walk=null; S.spd=10; S.spdOrd=10; S.fod=[]; S.fodFound=false; S.fodHit=false; S.fodWarned=false;
   rollList();
   S.Tf=27; S.Ta=28; S.list=0; S.gm=GM0; S.W=W0;
   S.mh=VH; S.Ph=0; S.relief=false;
@@ -661,7 +661,7 @@ function init(){
       pos:{sea:0,blow:0,fm:0,drain:0},tgt:{sea:0,blow:0,fm:0,drain:0},flags:{}};
   });
   S.byId=Object.fromEntries(S.tanks.map(t=>[t.id,t]));
-  S.dbac=[1,2,3,4,5,6].map(n=>({n,state:'off',tm:0,loaded:false,failed:false,lowOil:false,unloaderStuck:false,failing:false,temp:85,loadT:-1}));
+  S.dbac=[1,2,3,4,5,6].map(n=>({n,state:'off',tm:0,loaded:false,failed:false,lowOil:false,unloaderStuck:false,unloaderShut:false,manOpen:false,failing:false,temp:85,loadT:-1}));
   S.wdPanelPower=true; S.allPowerLost=false; S.procErrs=[]; S.dbacManned=false;
   S.tanks.forEach(t=>{t.hcs=HCS.findIndex(h=>h.tanks.includes(t.id)); t.cmdT=0; t.stuckSea=false; t.fmStuck=false; t.tliFail=null; t.sounded=-1;
     t.tliReported=false; t.tliJunk=Math.random()*.6+.2; t.tliJunkT=0;});
@@ -685,15 +685,27 @@ const HCS=[
 function step(dt){
   S.t+=dt;
   { const d=S.spdOrd-S.spd; if(d) S.spd+=Math.sign(d)*Math.min(Math.abs(d),.03*dt); }   // the ship answers the bell slowly: about 2 kts a minute
+  if(S.walk){ const w=S.walk, one=f=>f.k==='hose'?`fire hose hanging from the ${FIRE_ST[f.st].name}`:`${FOD_NAME[f.ty]} adrift on the deck`;
+    if(S.hg>1.5){ S.walk=null; log('FOD walkdown stopped: water in the well','caution'); }
+    else if(w.hold>0){ w.hold-=dt; if(w.hold<=0&&w.cur){ const f=w.cur; S.fod=S.fod.filter(q=>q!==f); w.cur=null; w.n++; log(`FOD walkdown: ${f.k==='hose'?'fire hose restowed':FOD_NAME[f.ty]+' removed'}`); if(!S.fod.length) S.fodFound=false; } }
+    else { w.x+=3*dt;                                    // a slow search pace; 20 s at each object to identify and clear it
+      const f=S.fod.find(q=>!q.seen&&(q.k==='hose'?FIRE_ST[q.st].x:q.x)<=w.x+2);
+      if(f){ f.seen=true; w.cur=f; w.hold=20; S.fodFound=true; log('FOD walkdown: '+one(f),'caution'); }
+      else if(w.x>=LWL-6){ S.walk=null; S.fodFound=false; log(w.n?`FOD walkdown complete: ${w.n} item${w.n>1?'s':''} cleared, well deck clear`:'FOD walkdown complete: nothing found, well deck clear'); } } }
   const la=Math.abs(S.list||0); if(la>1) S.tOver1+=dt; if(la>S.maxList) S.maxList=la;
   // compressors
   let supply=0;
+  // unloaders follow the tank mode buttons (user): any tank in PRE DEBLST or DEBLST closes them, all tanks back in NORMAL opens them
+  const wantAir=S.tanks.some(t=>t.blowT&&(t.mode==='PRE'||t.mode==='DEBLST'));
   for(const c of S.dbac){
     if(c.state==='starting'){c.tm+=dt; if(c.tm>=START_T){c.state='running';log(`DBAC-${c.n} at speed, running unloaded`);}}
-    if(c.state==='running'&&c.loaded&&!c.unloaderStuck) supply+=DBAC_SCFS;   // stuck-open unloader dumps this unit's air
+    if(c.state==='running'&&(S.dccPower||S.localCtl)){ const ld=wantAir&&!c.manOpen;
+      if(ld&&!c.loaded){ c.loaded=true; c.loadT=S.t; log(`DBAC-${c.n} unloaders closed: discharging to main air header`); }
+      else if(!ld&&c.loaded){ c.loaded=false; c.unloadT=S.t; log(`DBAC-${c.n} unloaders open: discharging to atmosphere`); } }
+    if(dbacEff(c)) supply+=DBAC_SCFS;
     // discharge temperature: ~300°F loaded (user). Running unloaded it cools toward ~90°F, taking ~20-25 min to get
     // below 100°F (est.; user: roughly 30 min). Stop rule is temperature: <=100°F OK to stop.
-    const Tt=c.state==='off'?85:(c.loaded&&!c.unloaderStuck?300:90), tau=c.state==='off'?900:(Tt>c.temp?45:450);
+    const Tt=c.state==='off'?85:(dbacEff(c)?300:90), tau=c.state==='off'?900:(Tt>c.temp?45:450);
     c.temp+=(Tt-c.temp)*Math.min(1,dt/tau);
     // a failing unit left loaded seizes after ~5 min; unloading it takes the load off
     if(c.failing&&c.state!=='off'&&c.loaded&&S.t-c.failT>300){c.state='off';c.loaded=false;c.failing=false;c.failed=true;
@@ -834,6 +846,8 @@ function toggleValve(t,k,label){t.tgt[k]=t.tgt[k]?0:1; t.cmdT=S.t; log(`${t.id} 
 const rnd=a=>a[Math.random()*a.length|0];
 const dbacOf=r=>S.dbac[+r.target.split('-')[1]-1];
 const liveDbac=()=>S.dbac.filter(c=>!c.failed&&!c.lowOil);
+// is this unit really discharging to the header? Stuck open: commanded closed but dumping to atmosphere. Stuck shut: still on the header.
+const dbacEff=c=>c.state==='running'&&(c.unloaderShut||(c.loaded&&!c.unloaderStuck));
 // fire stations on the wing wall catwalks: one starboard, two port (user). Frame positions are estimates. sy: -1 = stbd, +1 = port (view y)
 const FIRE_ST=[{name:'starboard fire station',x:640,sy:-1},{name:'port forward fire station',x:590,sy:1},{name:'port aft fire station',x:705,sy:1}];
 const FOD_TY=['pallet','drum','chock','chain','cone'], FOD_NAME={pallet:'pallet',drum:'55-gallon drum',chock:'wheel chock',chain:'tie-down chain',cone:'safety cone'};
@@ -844,6 +858,10 @@ const CAS={
     inject(){const c=liveDbac().find(c=>c.loaded&&!c.unloaderStuck)||liveDbac().find(c=>c.state!=='off'&&!c.unloaderStuck)||rnd(liveDbac()); if(!c) return null;
       c.unloaderStuck=true; return `DBAC-${c.n}`;},
     cleared:r=>!dbacOf(r).unloaderStuck},
+  unloaderOpen:{name:'DBAC unloader valve fails to open',
+    inject(){const c=liveDbac().find(c=>c.state==='running'&&c.loaded&&!c.unloaderShut)||liveDbac().find(c=>c.state!=='off'&&!c.unloaderShut); if(!c) return null;
+      c.unloaderShut=true; return `DBAC-${c.n}`;},
+    cleared:r=>!dbacOf(r).unloaderShut},
   lowOil:{name:'DBAC trip on low lube oil',
     inject(){const c=liveDbac().find(c=>c.loaded)||liveDbac().find(c=>c.state!=='off')||rnd(liveDbac()); if(!c) return null;
       c.state='off'; c.loaded=false; c.lowOil=true; return `DBAC-${c.n}`;},
@@ -903,7 +921,7 @@ function pickCasualty(){
   const ok=Object.keys(CAS).filter(k=>!CAS[k].auto&&!S.cas.some(r=>r.key===k&&r.tClr==null));
   const running=S.dbac.some(c=>c.state==='running'), loaded=S.dbac.some(c=>c.loaded);
   const pref=ok.filter(k=>{
-    if(k==='dbacFail'||k==='lowOil'||k==='unloader') return running;
+    if(k==='dbacFail'||k==='lowOil'||k==='unloader'||k==='unloaderOpen') return running;
     if(k==='hdrRelief'||k==='hdrRupture') return loaded;
     if(k==='wdPower') return S.wdControl;
     if(k==='fod') return !!(S.craft&&S.craft.type==='LCAC');
@@ -955,19 +973,23 @@ const ACT={
   // DBAC rooms: operators must be on station and in comms (user). Unmanned rooms add travel time to every local action.
   manRooms(){ if(S.dbacManned){log('DBAC rooms already manned');return;}
     localOp(120,'Manning DBAC rooms 5-37-0-E, 6-73-0-E and 3-113-2-E (1JV)',()=>{S.dbacManned=true; log('DBAC operators on station and in comms');});},
-  askDbac(c){ const on=c.state!=='off', open=!on||!c.loaded||c.unloaderStuck;
+  askDbac(c){ const on=c.state!=='off', open=!on||!dbacEff(c);
     localOp(S.dbacManned?20:150,`DCC to DBAC-${c.n} operator: report status`,()=>{
-      log(`DBAC-${c.n} operator: ${on?'running':'stopped'}, unloaders ${open?'OPEN':'closed'}${c.unloaderStuck&&c.loaded?' (console shows closed)':''}, ${Math.round(c.temp)}°F${c.lowOil?', low lube oil':''}${c.failing?', heavy vibration':''}`,c.unloaderStuck&&c.loaded||c.failing?'caution':'');});},
+      log(`DBAC-${c.n} operator: ${on?'running':'stopped'}, unloaders ${open?'OPEN':'closed'}${c.unloaderStuck&&c.loaded?' (console shows closed)':''}${c.unloaderShut&&!c.loaded&&on?' (console shows open)':''}, ${Math.round(c.temp)}°F${c.lowOil?', low lube oil':''}${c.failing?', heavy vibration':''}`,c.unloaderStuck&&c.loaded||c.unloaderShut&&!c.loaded&&on||c.failing?'caution':'');});},
   closeUnloader(c){ if(!c.unloaderStuck){log(`DBAC-${c.n}: unloader is working normally`);return;}
     localOp((S.dbacManned?0:120)+60,`DBAC operator to close DBAC-${c.n} unloaders manually`,()=>{c.unloaderStuck=false; log(`DBAC-${c.n} unloaders closed manually. Discharging to the main air header`);});},
+  openUnloader(c){ if(c.state==='off'){ log(`DBAC-${c.n} is stopped`); return; }
+    if(!c.unloaderShut&&!c.loaded){ log(`DBAC-${c.n}: unloaders are already open`); return; }
+    localOp((S.dbacManned?0:120)+60,`DBAC operator to open DBAC-${c.n} unloaders manually`,()=>{ c.unloaderShut=false; c.manOpen=true; c.loaded=false; c.unloadT=S.t;
+      log(`DBAC-${c.n} unloaders opened manually and held open. Discharging to atmosphere`); }); },
   addOil(c){ if(!c.lowOil){log(`DBAC-${c.n}: lube oil level normal`);return;}
     localOp((S.dbacManned?0:120)+240,`Adding lube oil to DBAC-${c.n}`,()=>{c.lowOil=false; log(`DBAC-${c.n} oil topped off and reset. Available to start`);});},
-  fodWalk(){ localOp(180,'Well deck FOD walkdown started',()=>{
-    if(!S.fod.length){ log('FOD walkdown complete: well deck clear'); return; }
-    S.fodFound=true; log('FOD walkdown: '+fodDesc()+'. Well deck is fouled for LCAC operations','caution'); }); },
-  fodClear(){ if(!S.fod.length){ log('Nothing to clear: the well deck is clear'); return; }
-    if(!S.fodFound){ log('Nothing has been reported in the well. Do a FOD walkdown first'); return; }
-    localOp(150,S.fod.some(f=>f.k==='hose')?'Restowing the fire hose at the catwalk fire station':'Clearing loose gear from the well deck',()=>{ S.fod=[]; S.fodFound=false; log('Well deck clear of foreign objects'); }); },
+  // FOD walkdown: four Boatswain's Mates walk the well forward to aft in a line, identify each object and clear it (see step())
+  fodWalk(){ if(S.walk){ log('FOD walkdown already in progress'); return; }
+    if(S.hg>1){ log('Well deck is flooded: a FOD walkdown needs a dry well','caution'); return; }
+    if(S.craft&&S.craft.state!=='docked'){ log('Craft is moving in the well: hold the FOD walkdown','caution'); return; }
+    S.fod.forEach(f=>{ f.seen=false; }); S.walk={x:WELL_X0+4,hold:0,cur:null,n:0};
+    log("FOD walkdown: four Boatswain's Mates walking the well deck, forward to aft"); },
   takeRapid(){ if(!S.wdControl){log('DCC already has the rapid ballast tanks');return;}
     if(!S.dccPower&&!S.localCtl){log('No power to DCC ballast section','caution');return;}
     S.wdControl=false; log('DCC has taken control of the rapid ballast tanks');},
@@ -992,7 +1014,7 @@ function dbacCmd(c,a){
   if(a==='start'&&c.lowOil){log(`DBAC-${c.n} tripped on low lube oil. Add oil and reset, or start another unit`,'caution');return;}
   if(a==='start'&&c.state==='off'){
     if(!S.dbacManned) procErr(`DBAC-${c.n} started without operators on station and in comms`);
-    c.state='starting';c.tm=0;c.loaded=false;c.unloadT=S.t;log(`DBAC-${c.n} start, unloaders open`);}
+    c.state='starting';c.tm=0;c.loaded=false;c.manOpen=false;c.unloadT=S.t;log(`DBAC-${c.n} start, unloaders open`);}
   if(a==='stop'&&c.state!=='off'){
     // securing rule (user): at or below 100°F it can be shut down; above 100°F (e.g. 150-200°F) open the
     // unloaders and let it run unloaded until below 100°F, then stop
@@ -1002,7 +1024,7 @@ function dbacCmd(c,a){
     if(bad) procErr(bad);
     if(c.failing){ c.failing=false; c.failed=true;
       log(bad?`DBAC-${c.n} damaged: stopped before it was unloaded and cooled. Out of service`:`DBAC-${c.n} secured correctly after high vibration. Out of service for inspection`,bad?'alarm':''); }
-    c.state='off';c.loaded=false;log(`DBAC-${c.n} stopped`);}
+    c.state='off';c.loaded=false;c.manOpen=false;log(`DBAC-${c.n} stopped`);}
   if(a==='load'){ if(c.state==='running'){if(!c.loaded){c.loaded=true;c.loadT=S.t;log(`DBAC-${c.n} unloaders closed: discharging to main air header`);}} else {log(`DBAC-${c.n} unloader interlock: compressor not at speed`,'caution');}}
   if(a==='unload'&&c.loaded){c.loaded=false;c.unloadT=S.t;log(`DBAC-${c.n} unloaders open: discharging to atmosphere`);}
 }
@@ -1107,6 +1129,7 @@ function bringCraft(type){
   if(S.craft){craftMsg(`The ${S.craft.type} is already in or at the well. Launch it first.`);return;}
   if(S.spd>SPD_MAX+.05){craftMsg(`Ship speed ${fmt(S.spd,1)} kts: slow to ${SPD_MAX} kts or less to recover craft.`);return;}
   if(type==='LCAC'&&S.fodFound&&S.fod.length){craftMsg('Well deck is fouled. Clear the foreign object before LCAC operations.');return;}
+  if(S.walk){craftMsg('FOD walkdown in progress: personnel are in the well deck.');return;}
   if(S.gateAng<85){craftMsg(`Stern gate must be full down before the ${type} can enter.`);return;}
   const slope=Math.max((S.Ta-S.Tf)/LWL,1e-4);
   let park=WELL_X0+18, draft=0;
@@ -1126,6 +1149,7 @@ $('#launch').addEventListener('click',()=>{const c=S.craft;
   if(S.gateAng<85){craftMsg('Lower the stern gate full down to launch.');return;}
   if(S.spd>SPD_MAX+.05){craftMsg(`Ship speed ${fmt(S.spd,1)} kts: slow to ${SPD_MAX} kts or less to launch craft.`);return;}
   if(c.type==='LCAC'&&S.fodFound&&S.fod.length){craftMsg('Well deck is fouled. Clear the foreign object before LCAC operations.');return;}
+  if(S.walk){craftMsg('FOD walkdown in progress: personnel are in the well deck.');return;}
   if(c.type==='LCU'&&c.aground){craftMsg('LCU is aground. Add water to the well to float it before launching.');return;}
   if(c.type==='LCU'&&S.hg<CRAFT.LCU.loads[c.load].need){craftMsg(`Need ${CRAFT.LCU.loads[c.load].need} ft at the gate to launch a ${c.load} LCU; have ${fmt(S.hg,1)} ft.`);return;}
   c.state='launching'; log(`${c.type} launching`); craftMsg(`${c.type} backing out.`);
@@ -1154,7 +1178,7 @@ $('#resetBtn').addEventListener('click',()=>{ if(MODE==='instructor') sendCmd({o
     const t=S.byId[$('#actTank').value], h=S.hcs.find(x=>x.id===$('#actHcs').value), c=S.dbac[+$('#actDbac').value-1];
     if(['sound','reportTLI','vickers','handPump','isoFM'].includes(a)) ACT[a](t);
     else if(a==='xconn') ACT.xconn(h);
-    else if(['askDbac','closeUnloader','addOil'].includes(a)) ACT[a](c);
+    else if(['askDbac','closeUnloader','openUnloader','addOil'].includes(a)) ACT[a](c);
     else if(a==='isoHdrP') ACT.isoHdr('port'); else if(a==='isoHdrS') ACT.isoHdr('stbd');
     else if(ACT[a]) ACT[a]();
   });
@@ -1265,7 +1289,7 @@ function buildPanes(){
       const d=el('div',{class:'dbac','data-n':n});
       d.innerHTML=`<span class="nm">DBAC-${n}</span><span class="ps" data-ps>0.0 psig</span>
         <div class="btns"><span class="lamp grn" data-run>RUN</span><span class="lamp" data-uo>UNLDR OPEN</span><span class="lamp" data-uc>UNLDR CLOSED</span></div>
-        <div class="btns"><button class="pb" data-a="start">START</button><button class="pb" data-a="stop">STOP</button><button class="pb" data-a="load">CLOSE UNLDRS</button><button class="pb" data-a="unload">OPEN UNLDRS</button></div>`;
+        <div class="btns"><button class="pb" data-a="start">START</button><button class="pb" data-a="stop">STOP</button></div>`;
       r.append(d);
     }
     rw.append(r);
@@ -1274,7 +1298,7 @@ function buildPanes(){
   const hdr=el('div',{class:'hdr'});
   hdr.innerHTML=`<div><div class="note">Main air header</div><div class="big" id="hdrP">0.0 psig</div></div><span class="lamp red" id="reliefLamp">RELIEF LIFTING</span>
    <span class="lamp grn" id="mannedLamp">ROOMS MANNED</span><button class="pb wide" id="manRooms">Man DBAC rooms (1JV)</button>
-   <span class="note" style="flex:1;min-width:200px">2,160 cfm each at 20 psig, about 300°F loaded. Start with unloaders open; close them once at speed. To secure: at or below 100°F, stop it. Above 100°F, open unloaders and let it run unloaded until below 100°F, then stop. Console unloader lamps show what was commanded, not always what the valve did. Keep operators on station and in comms.</span>`;
+   <span class="note" style="flex:1;min-width:200px">2,160 cfm each at 20 psig, about 300°F loaded. Unloaders work on their own: they close when a tank is put in PRE DEBLST or DEBLST and open when the tanks are back in NORMAL. To secure: at or below 100°F, stop it. Above 100°F, normalize the tanks so it runs unloaded until below 100°F, then stop. Console unloader lamps show what was commanded, not always what the valve did. Keep operators on station and in comms.</span>`;
   air.append(hdr);
   rw.addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;
     dbacCmd(S.dbac[b.closest('.dbac').dataset.n-1],b.dataset.a);});
@@ -1441,9 +1465,8 @@ function render(){
     d.querySelector('[data-uo]').classList.toggle('on',on&&!c.loaded); d.querySelector('[data-uc]').classList.toggle('on',on&&c.loaded);
     const dead=!S.dccPower&&!S.localCtl;
     d.querySelector('[data-ps]').textContent=dead?'no ind.':c.failed?'OUT OF SERVICE':c.lowOil?'TRIPPED: LOW OIL':
-      `${c.loaded?(c.unloaderStuck?'0.4':fmt(S.Ph,1)):on?'0.4':'0.0'} psig · ${Math.round(c.temp)}°F`;
+      `${dbacEff(c)?fmt(S.Ph,1):on?'0.4':'0.0'} psig · ${Math.round(c.temp)}°F`;
     d.querySelector('[data-a=start]').classList.toggle('lit',c.state!=='off');
-    d.querySelector('[data-a=load]').classList.toggle('lit',c.loaded);
   });
   const hp=$('#hdrP'); if(hp){hp.textContent=fmt(S.Ph,1)+' psig';$('#reliefLamp').classList.toggle('on',S.relief);$('#mannedLamp').classList.toggle('on',S.dbacManned);}
 
@@ -1587,7 +1610,7 @@ function drawWell(realDt,now){
   if(G3.on){ // 3D view: WebGL draws the scene underneath; this canvas carries only the radio bubble, frame and HUD
     c.clearRect(0,0,Wc,Hc);
     try{ g3frame(Wc,Hc,realDt,now); }catch(e){ console.warn('3D view stopped',e); G3.failed=true; g3sync(); return; }
-    sillCall(now,G3.P); drawWellHud(c,Wc,Hc,true); return;
+    sillCall(now,G3.P); drawFodMark(c,G3.P); drawWellHud(c,Wc,Hc,true); return;
   }
   const f=Wc*1.08, cx=Wc/2, cy=Hc*.42;
   const P=(x,y,z)=>{const d=Math.max(2,x-CAM.x);return [cx+f*y/d, cy-f*(z-CAM.z)/d];};
@@ -1705,6 +1728,8 @@ function drawWell(realDt,now){
   // foreign objects (casualty): a hanging fire hose or loose gear on the deck
   for(const fo of S.fod||[]){ if(fo.k==='hose'){ const st=FIRE_ST[fo.st]; line(P(st.x,st.sy*25,ZC),P(st.x+2,st.sy*24.4,ZC-13),'#c9b27a',2); }
     else if(fo.x>CAM.x+10){ const [u,v]=P(fo.x,fo.y,Z0+1), rr=Math.max(2,f*1.2/(fo.x-CAM.x)); c.fillStyle='#b5762f'; c.fillRect(u-rr,v-rr,2*rr,2*rr); } }
+  if(S.walk) for(const y of[-18,-6,6,18]){ const [u,vb]=P(S.walk.x,y,Z0), [,vt]=P(S.walk.x,y,Z0+5.9), hh=vb-vt;   // walkdown party
+    c.fillStyle='#1f2b3f'; c.fillRect(u-hh*.14,vt+hh*.55,hh*.28,hh*.45); c.fillStyle='#e2772b'; c.fillRect(u-hh*.17,vt+hh*.16,hh*.34,hh*.42); c.fillStyle='#e6e9ea'; c.beginPath(); c.arc(u,vt+hh*.08,hh*.08,0,7); c.fill(); }
   // catwalk railings (inboard edge of each wing wall)
   for(const y of [YL,YR]){
     for(let x=XF+4;x<XA;x+=9) line(P(x,y,ZC),P(x,y,ZC+3.6),'#b9beba',1.2);
@@ -1715,8 +1740,18 @@ function drawWell(realDt,now){
   for(const bm of BMS) if(bm.x>=crFront) drawBM(c,P,bm,now);
   if(cr) drawCraft(c,P,cr,wz,fill,line,f);
   for(const bm of BMS) if(bm.x<crFront) drawBM(c,P,bm,now);
-  sillCall(now,P);
+  sillCall(now,P); drawFodMark(c,P);
   drawWellHud(c,Wc,Hc,false);
+}
+// on-screen marker for the object the FOD walkdown party has just found
+function drawFodMark(c,P){
+  const w=S.walk; if(!w||!w.cur) return; const f=w.cur;
+  const [u,v]=f.k==='hose'?P(FIRE_ST[f.st].x+2,FIRE_ST[f.st].sy*24.2,WW_CAT.z-9):P(f.x,f.y,WELL_FLOOR+2);
+  c.save(); c.font='700 13px Barlow Condensed, Arial Narrow, sans-serif';
+  const t=('FOD: '+(f.k==='hose'?'fire hose, '+FIRE_ST[f.st].name:FOD_NAME[f.ty])).toUpperCase(), tw=c.measureText(t).width+16;
+  const bx=Math.max(10,Math.min(u-tw/2,c.canvas.clientWidth-tw-10)), by=Math.max(44,v-50);
+  c.strokeStyle='rgba(255,96,74,.95)'; c.lineWidth=1.6; c.beginPath(); c.arc(u,v,13,0,Math.PI*2); c.stroke(); c.beginPath(); c.moveTo(u,v-13); c.lineTo(u,by+22); c.stroke();
+  c.fillStyle='rgba(122,22,14,.93)'; c.fillRect(bx,by,tw,22); c.strokeRect(bx,by,tw,22); c.fillStyle='#fff'; c.textAlign='left'; c.fillText(t,bx+8,by+15.5); c.restore();
 }
 // control room window frame + HUD (shared by the simple and 3D views)
 function drawWellHud(c,Wc,Hc,g3){
@@ -2013,7 +2048,8 @@ function g3build(){
   { const mRed=std({color:0xa3261c,roughness:.6}); M.tanHose=std({color:0xc8b07a,roughness:.9});
     for(const st of FIRE_ST){ g3box(sc,st.x-1.6,st.x+1.6,st.sy*30.9,st.sy*29.9,ZC+1,ZC+5.5,mRed,false);
       const reel=new THREE.Mesh(new THREE.TorusGeometry(1.1,.38,8,18),M.tanHose); reel.rotation.y=Math.PI/2; reel.position.copy(g3v(st.x,st.sy*29.6,ZC+3.2)); sc.add(reel); }
-    G3.fodG=new THREE.Group(); sc.add(G3.fodG); G3.fodSig=''; }
+    G3.fodG=new THREE.Group(); sc.add(G3.fodG); G3.fodSig='';
+    G3.walkY=[-18,-6,6,18]; G3.walkers=[0,1,2,3].map(i=>{ const g=g3bm(i===1?0x2f6fb5:0xe2772b,false); g.visible=false; sc.add(g); return g; }); }
   // ---- people and vehicles ----
   G3.bms=BMS.map(bm=>{const g=g3bm(bm.vest,bm.caller);g.position.copy(g3v(bm.x,bm.y,ZC));g.rotation.y=bm.y<0?Math.PI/2:-Math.PI/2;sc.add(g);return g;});
   G3.veh=new THREE.Group(); sc.add(G3.veh);
@@ -2299,6 +2335,14 @@ function g3frame(Wc,Hc,realDt,now){
     if(sig!==G3.fodSig){ G3.fodSig=sig; while(G3.fodG.children.length) G3.fodG.remove(G3.fodG.children[0]); for(const fo of S.fod||[]) G3.fodG.add(g3fod(fo)); }
     for(const o of G3.fodG.children){ const u=o.userData; if(u.k!=='obj') continue; const wl=S.hg>.02?wz(u.x,u.y):-1e9, fl=u.float&&wl>Z0+.3;
       o.position.y=fl?wl-.35+Math.sin(t*1.3+u.x)*.08:Z0; o.rotation.z=fl?Math.sin(t*.9+u.y)*.05:0; } }
+  // FOD walkdown party: line abreast across the well; the nearest one steps over to each object and crouches to it
+  { const w=S.walk, ys=[-18,-6,6,18]; let pick=-1, ty=0;
+    if(w&&w.cur){ ty=w.cur.k==='hose'?FIRE_ST[w.cur.st].sy*21:w.cur.y; let bd=1e9; ys.forEach((y,i)=>{ const d=Math.abs(y-ty); if(d<bd){ bd=d; pick=i; } }); }
+    G3.walkers.forEach((g,i)=>{ g.visible=!!w; if(!w){ G3.walkY[i]=ys[i]; return; }
+      const tgt=i===pick?(w.cur.k==='hose'?ty:ty+(ty>ys[i]?-1.6:1.6)):ys[i], moving=!(w.hold>0);
+      G3.walkY[i]+=(tgt-G3.walkY[i])*Math.min(1,realDt*2.5);
+      g.position.set(G3.walkY[i],Z0+(moving?Math.abs(Math.sin(t*5+i*1.7))*.12:0),-(w.x+(i===pick?1.2:0)));
+      g.scale.y=i===pick&&!moving?.8:1; g.rotation.z=moving?Math.sin(t*5+i*1.7)*.03:0; }); }
   // vehicles, people, craft
   G3.veh.visible=!!(S.vehSide&&S.vehSide!=='none'); G3.veh.position.x=-(S.vehY||0);
   G3.bms.forEach((g,i)=>{ g.rotation.z=Math.sin(now/950+BMS[i].x*.37)*.03; });
@@ -2404,7 +2448,7 @@ function audioUpdate(realDt){
     const osc=c.loaded?f*.075:0;          // loaded: pitch oscillates
     v.lfoG.gain.setTargetAtTime(osc,t,.6); v.lfoG2.gain.setTargetAtTime(osc*2,t,.6);
     v.lp.frequency.setTargetAtTime(260+260*v.spin+(c.loaded?160:0),t,k);
-    { const ld=c.loaded&&!c.unloaderStuck; v.ng.gain.setTargetAtTime((ld?.30:.17)*v.spin,t,.3); v.bp.frequency.setTargetAtTime(ld?700:2400,t,.3); } // unloaded: air hissing to atmosphere
+    { const ld=dbacEff(c); v.ng.gain.setTargetAtTime((ld?.30:.17)*v.spin,t,.3); v.bp.frequency.setTargetAtTime(ld?700:2400,t,.3); } // unloaded: air hissing to atmosphere
     v.out.gain.setTargetAtTime(.16*Math.pow(v.spin,1.4),t,.12);
   });
   const w=AUD.water, q=Math.abs(S.wellQ), lvl=Math.min(1,Math.sqrt(q/1800)), jets=S.gateAng<85;
@@ -2694,7 +2738,7 @@ function snapshot(){
     t45:S.t45==null?-1:Math.round(S.t45),
     tk:S.tanks.map(t=>{const f=t.flags;return [Math.round(1000*t.V/t.cap),MI[t.mode]||0,r3(t.pos.sea),r3(t.pos.blow),r3(t.pos.fm),r3(t.pos.drain),Math.round(1000*tli(t)),
       (f.overflow?1:0)|(f.drainStall?2:0)|(f.blowThru?4:0)|(f.backflood?8:0)|(t.tliReported?16:0)|(t.tliChronic?32:0),t.tgt.fm?1:0,t.tgt.drain?1:0];}),
-    db:S.dbac.map(c=>[SI[c.state]||0,c.loaded?1:0,Math.round(c.temp),(c.failed?1:0)|(c.lowOil?2:0)|(c.unloaderStuck?4:0)|(c.failing?8:0),Math.round(c.tm)]),
+    db:S.dbac.map(c=>[SI[c.state]||0,c.loaded?1:0,Math.round(c.temp),(c.failed?1:0)|(c.lowOil?2:0)|(c.unloaderStuck?4:0)|(c.failing?8:0)|(c.unloaderShut?16:0),Math.round(c.tm)]),
     cr:S.craft?[S.craft.type,Math.round(S.craft.x),S.craft.state,S.craft.aground?1:0,S.craft.draft||0]:0,
     cs:S.cas.slice(-8).map(r=>[r.key,String(r.target||'').slice(0,24),Math.round(r.t0),r.tClr==null?-1:Math.round(r.tClr),r.hidden?1:0]),
     al:(S.curAlarms||[]).slice(0,6).map(([sv,m])=>[sv,String(m).slice(0,70)]),
@@ -2702,7 +2746,7 @@ function snapshot(){
     pe:[S.procErrs.length,String((S.procErrs[S.procErrs.length-1]||{}).msg||'').slice(0,90)],
     tu:[TUNE.gap,TUNE.list,TUNE.veh,TUNE.tliChronic,S.casHide?1:0,S.casAuto?1:0,TUNE.sea,TUNE.light],
     ps:[S.prestage==null?-1:S.prestage?1:0,String(S.prestageNote||'').slice(0,50)],
-    vk:[r3(S.spd),S.spdOrd], fo:[S.fodFound?1:0,S.fodHit?1:0,S.fod.map(f=>f.k==='hose'?[0,f.st]:[1,FOD_TY.indexOf(f.ty),f.x,f.y])]};
+    vk:[r3(S.spd),S.spdOrd], wk:S.walk?[Math.round(S.walk.x),S.walk.cur?S.fod.indexOf(S.walk.cur):-1]:0, fo:[S.fodFound?1:0,S.fodHit?1:0,S.fod.map(f=>f.k==='hose'?[0,f.st]:[1,FOD_TY.indexOf(f.ty),f.x,f.y])]};
   // presence is capped at 4 KiB: trim the log and alarms if needed
   let j=JSON.stringify(s); while(new TextEncoder().encode(j).length>3700&&(s.lg.length||s.al.length)){ if(s.lg.length) s.lg.pop(); else s.al.pop(); j=JSON.stringify(s); }
   return s;
@@ -2720,7 +2764,7 @@ function applySnap(s){
     t.tgt.sea=MODES[t.mode].sea; t.tgt.blow=MODES[t.mode].blow; t.tgt.fm=a[8]?1:0; t.tgt.drain=a[9]?1:0; t.mirrorTli=N(a[6])/1000;
     const b=N(a[7]); t.flags={overflow:!!(b&1),drainStall:!!(b&2),blowThru:!!(b&4),backflood:!!(b&8)}; t.tliReported=!!(b&16); t.tliChronic=!!(b&32);});
   if(Array.isArray(s.db)) S.dbac.forEach((c,i)=>{const a=s.db[i]; if(!Array.isArray(a)) return;
-    c.state=ST_ARR[a[0]]||'off'; c.loaded=!!a[1]; c.temp=N(a[2]); const b=N(a[3]); c.failed=!!(b&1); c.lowOil=!!(b&2); c.unloaderStuck=!!(b&4); c.failing=!!(b&8); c.tm=N(a[4]);});
+    c.state=ST_ARR[a[0]]||'off'; c.loaded=!!a[1]; c.temp=N(a[2]); const b=N(a[3]); c.failed=!!(b&1); c.lowOil=!!(b&2); c.unloaderStuck=!!(b&4); c.failing=!!(b&8); c.unloaderShut=!!(b&16); c.tm=N(a[4]);});
   S.craft=Array.isArray(s.cr)&&CRAFT[s.cr[0]]?{type:s.cr[0],x:N(s.cr[1]),state:String(s.cr[2]),aground:!!s.cr[3],draft:N(s.cr[4])}:null;
   if(Array.isArray(s.cs)) S.cas=s.cs.filter(a=>Array.isArray(a)&&CAS[a[0]]).map(a=>({key:a[0],name:CAS[a[0]].name,target:String(a[1]),t0:N(a[2]),tClr:N(a[3])<0?null:N(a[3]),hidden:!!a[4]}));
   S.mirAlarms=Array.isArray(s.al)?s.al.filter(Array.isArray).map(a=>[['alarm','caution'].includes(a[0])?a[0]:'caution',String(a[1])]):[];
@@ -2730,6 +2774,7 @@ function applySnap(s){
   if(Array.isArray(s.vk)){ S.spd=N(s.vk[0]); S.spdOrd=N(s.vk[1]); }
   if(Array.isArray(s.fo)){ S.fodFound=!!s.fo[0]; S.fodHit=!!s.fo[1];
     S.fod=(Array.isArray(s.fo[2])?s.fo[2]:[]).filter(Array.isArray).slice(0,4).map(a=>a[0]===0?{k:'hose',st:Math.min(2,Math.max(0,N(a[1])|0))}:{k:'obj',ty:FOD_TY[N(a[1])|0]||'pallet',x:N(a[2]),y:N(a[3])}); }
+  S.walk=Array.isArray(s.wk)?{x:N(s.wk[0]),hold:N(s.wk[1])>=0?1:0,cur:N(s.wk[1])>=0?(S.fod[N(s.wk[1])]||null):null,n:0}:null;
   // keep the instructor's controls showing the trainee's actual settings (not while being edited)
   if(Array.isArray(s.tu)){ const [g,l,v,tc,h,au,se,li]=s.tu, act=document.activeElement, setv=(id,val)=>{const e=$(id); if(e&&e!==act) e.value=val;};
     if(+g>0){ setv('#gapTune',g); if($('#gapTune')!==act) $('#gapRead').textContent=`Cd ${(+g).toFixed(2)}`; }
