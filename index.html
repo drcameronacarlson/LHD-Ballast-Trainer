@@ -200,6 +200,12 @@ body.mode-instructor .mirrorNote{display:block}
 #radioLog{margin-top:8px;max-height:110px}
 #radioCard select{font-family:var(--font-body);font-size:13px;padding:4px 6px;border:1px solid var(--edge);border-radius:3px;background:var(--btn);color:var(--btn-ink);max-width:240px}
 #radioLog li.you span{color:var(--sea)}
+#instPw{width:20ch}
+.linkbar details{flex-basis:100%;font-size:12px;color:var(--ink-3)}
+.linkbar details summary{cursor:pointer;color:var(--ink-2)}
+.linkbar details p{margin:6px 0;max-width:80ch}
+#newPw{width:20ch}
+#newKey{width:min(100%,68ch)}
 .foot b{color:var(--ink-2)}
 /* console look: painted steel panels, lensed lamps, illuminated pushbuttons */
 .wdp,.room,.hdr,.trow{--hi:rgba(255,255,255,.16);--lo:rgba(0,0,0,.2)}
@@ -258,8 +264,18 @@ body.mode-instructor .mirrorNote{display:block}
     </div>
     <label class="wlbl" for="sessCode">Session code</label>
     <input id="sessCode" maxlength="24" value="drill-1" autocomplete="off" spellcheck="false">
+    <span class="wgrp" id="instLock" hidden>
+      <input id="instPw" type="password" placeholder="Instructor password" autocomplete="off" aria-label="Instructor password">
+      <button class="tbtn" id="instUnlock">Unlock</button>
+      <button class="tbtn" id="instCancel">Cancel</button>
+    </span>
     <span class="chip" id="linkStat">Solo: one screen</span>
     <span class="note" id="linkHint">Two screens: open this link on both, pick Trainee on one and Instructor on the other, same session code.</span>
+    <details id="pwTool">
+      <summary>Change the instructor password</summary>
+      <p>The Instructor screen needs a password, and the trainee screen ignores instructor commands that were not made with it. To change it, type the new password here and send the key that appears to whoever maintains this app. The key is safe to share: the password cannot be read from it. The new password works once the key has been built into the app.</p>
+      <span class="wgrp"><input id="newPw" type="password" placeholder="New password" autocomplete="off" aria-label="New instructor password"><button class="tbtn" id="newPwGo">Make key</button><input id="newKey" readonly aria-label="Key for the new password" placeholder="Key appears here"></span>
+    </details>
   </section>
 
   <section class="readouts" aria-label="Ship condition">
@@ -473,6 +489,7 @@ body.mode-instructor .mirrorNote{display:block}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl-fast.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* LHD Ballast Trainer. Copyright (c) 2026 Nautical Solutions, LLC. All rights reserved.
@@ -2466,21 +2483,77 @@ function cleanCode(){ const c=String($('#sessCode').value||'').toLowerCase().rep
 function sendCmd(o){
   if(MODE!=='instructor'){ applyCmd(o); return; }
   if(!LINK.nr){ linkStatus('Not connected: command not sent','caution'); return; }
-  LINK.nr.emit('cmd',o).catch(e=>linkStatus(e&&e.code==='not_permitted'?'Only the owner or an Editor can run the instructor screen':'Command not sent. Check the connection','caution'));
+  if(!INST){ linkStatus('Enter the instructor password first','caution'); instAsk(); return; }
+  LINK.nr.emit('cmd',instSign(o)).catch(e=>linkStatus(e&&e.code==='not_permitted'?'Only the owner or an Editor can run the instructor screen':e&&e.code==='no_peer'?'No trainee connected: command not sent':'Command not sent. Check the connection','caution'));
 }
 function linkStatus(msg,cls=''){ const s=$('#linkStat'); s.textContent=msg; s.className='chip '+cls; }
+// Instructor password. The app holds only a public key. The password is stretched into a signing key on the instructor's
+// screen; every instructor command is signed, and the trainee's screen checks the signature against the public key.
+const INST_PUB='7b84cee790f6fdbd1a579e31f9b92a0424d745ecd4fd79e3aed7267404bffc4e', INST_SALT='lhdbt-instructor-v1', INST_SEEN=new Set(); let INST=null, INST_REJ=-1e9;
+const hexOf=u=>[...u].map(b=>b.toString(16).padStart(2,'0')).join(''), unhex=h=>Uint8Array.from(h.match(/../g).map(x=>parseInt(x,16)));
+function instKeys(pw){ if(!window.nacl) return null; let h=nacl.hash(new TextEncoder().encode(INST_SALT+'|'+pw)); for(let i=0;i<3000;i++) h=nacl.hash(h); return nacl.sign.keyPair.fromSeed(h.slice(0,32)); }
+function instTry(pw){ const k=instKeys(String(pw)); if(k&&hexOf(k.publicKey)===INST_PUB){ INST=k; try{sessionStorage.setItem('lhdbt-ipw',String(pw));}catch(_){} return true; } return false; }
+function instRestore(){ let q=''; try{ q=sessionStorage.getItem('lhdbt-ipw')||''; }catch(_){} return !!q&&instTry(q); }
+function instAsk(){ $('#instLock').hidden=false; const i=$('#instPw'); i.value=''; try{i.focus();}catch(_){} linkStatus(window.nacl?'Instructor screen: enter the password':'Password check did not load. Check the connection and reload','caution'); }
+function instSign(o){ const ts=Date.now(), n=Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+  return {o,ts,n,sig:hexOf(nacl.sign.detached(new TextEncoder().encode(JSON.stringify([LINK.code,o,ts,n])),INST.secretKey))}; }
+function instVerify(e){ try{ if(!window.nacl||!e||typeof e.sig!=='string'||e.sig.length!==128||typeof e.n!=='string') return null;
+    if(INST_SEEN.has(e.n)||Math.abs(Date.now()-e.ts)>432e5) return null;
+    if(!nacl.sign.detached.verify(new TextEncoder().encode(JSON.stringify([LINK.code,e.o,e.ts,e.n])),unhex(e.sig),unhex(INST_PUB))) return null;
+    INST_SEEN.add(e.n); if(INST_SEEN.size>2000) INST_SEEN.clear(); return e.o; }catch(_){ return null; } }
+{ const go=()=>{ if(!window.nacl){ instAsk(); return; } if(instTry($('#instPw').value)){ $('#instPw').value=''; setScreen('instructor'); } else { linkStatus('Wrong instructor password','alarm'); $('#instPw').select(); } };
+  $('#instUnlock').addEventListener('click',go); $('#instPw').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } });
+  $('#instCancel').addEventListener('click',()=>{ $('#instLock').hidden=true; $('#instPw').value=''; if(MODE==='solo') linkStatus('Solo: one screen'); });
+  $('#newPwGo').addEventListener('click',()=>{ const v=$('#newPw').value, k=v.length>=8?instKeys(v):null;
+    $('#newKey').value=!window.nacl?'Could not load. Check the connection and reload.':v.length<8?'Use at least 8 characters.':hexOf(k.publicKey); if(k) $('#newPw').value=''; }); }
+// Link without claude.ai: a BroadcastChannel joins windows on the same computer, and PeerJS (WebRTC) joins two computers
+// directly. The trainee hosts under an id made from the session code; instructors dial that id.
+let PEER_LOAD=null;
+function loadPeer(){ return PEER_LOAD||(PEER_LOAD=new Promise(res=>{ if(window.Peer) return res(true); const sc=document.createElement('script');
+  sc.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js'; sc.onload=()=>res(!!window.Peer); sc.onerror=()=>res(false); document.head.appendChild(sc); })); }
+function localRoom(code,role){
+  const id=Math.random().toString(36).slice(2,10), peers=new Map(), subs={}, seen=new Set(), R={local:true};
+  let pres=null, peersCb=null, bc=null, peer=null, conns=[], dead=false, p2p='', n=0, lastSend=0, dialT=null;
+  const fire=()=>{ if(peersCb) peersCb({peers:[...peers.values()].map(q=>({presence:q.pres,sameTab:false}))}); };
+  const handle=m=>{ if(dead||!m||typeof m!=='object'||m.id===id) return;
+    if(m.k==='p'){ peers.set(m.id,{pres:m.pres,at:Date.now()}); fire(); }
+    else if(m.k==='e'){ const key=m.id+':'+m.n; if(seen.has(key)) return; seen.add(key); if(seen.size>400) seen.clear(); (subs[m.topic]||[]).forEach(f=>f({data:m.data})); }
+    else if(m.k==='bye'){ peers.delete(m.id); fire(); } };
+  const send=m=>{ m.id=id; m.n=++n; try{ if(bc) bc.postMessage(m); }catch(_){} for(const c of conns) if(c.open){ try{c.send(m);}catch(_){} } };
+  try{ bc=new BroadcastChannel('lhd-'+code); bc.onmessage=e=>handle(e.data); }catch(_){}
+  const addConn=c=>{ conns.push(c); c.on('data',handle); c.on('open',()=>{ p2p='on'; if(pres) send({k:'p',pres}); });
+    c.on('close',()=>{ conns=conns.filter(x=>x!==c); }); c.on('error',()=>{}); };
+  R.startPeer=()=>{ if(dead||!window.Peer||peer) return; const hostId='lhdbt-'+code+'-host';
+    try{
+      if(role==='trainee'){ peer=new Peer(hostId); peer.on('connection',addConn); peer.on('error',e=>{ p2p=e&&e.type==='unavailable-id'?'taken':(p2p==='on'?'on':'err'); }); }
+      else { peer=new Peer(); const dial=()=>{ if(dead||conns.some(c=>c.open)) return; conns.forEach(c=>{try{c.close();}catch(_){}}); conns=[];
+          try{ addConn(peer.connect(hostId,{reliable:true,serialization:'json'})); }catch(_){} };
+        peer.on('open',()=>{ dial(); dialT=setInterval(dial,4000); }); peer.on('error',e=>{ if(!e||e.type!=='peer-unavailable') p2p=p2p==='on'?'on':'err'; }); }
+      peer.on('disconnected',()=>{ if(!dead) try{peer.reconnect();}catch(_){} });
+    }catch(_){ p2p='err'; } };
+  const beat=setInterval(()=>{ const now=Date.now(); if(pres&&now-lastSend>1800){ lastSend=now; send({k:'p',pres}); }
+    let ch=false; for(const [k,q] of peers) if(now-q.at>6000){ peers.delete(k); ch=true; } if(ch) fire(); },2000);
+  R.presence=q=>{ pres=q; lastSend=Date.now(); send({k:'p',pres}); return Promise.resolve(); };
+  R.emit=(topic,data)=>{ if(!peers.size) return Promise.reject({code:'no_peer'}); send({k:'e',topic,data}); return Promise.resolve(); };
+  R.on=(topic,fn)=>{ (subs[topic]=subs[topic]||[]).push(fn); };
+  R.onPeers=fn=>{ peersCb=fn; };
+  R.state=()=>p2p;
+  R.leave=()=>{ send({k:'bye'}); dead=true; clearInterval(beat); clearInterval(dialT); try{ if(bc) bc.close(); }catch(_){} try{ if(peer) peer.destroy(); }catch(_){} return Promise.resolve(); };
+  return R;
+}
 async function connectLink(){
   const code=cleanCode(); $('#sessCode').value=code;
-  if(LINK.nr&&LINK.code===code){ LINK.nr.presence({r:MODE,c:code}).catch(()=>{}); return; }
+  if(LINK.nr&&LINK.code===code&&(!LINK.local||LINK.role===MODE)){ LINK.nr.presence({r:MODE,c:code}).catch(()=>{}); return; }
   await leaveLink();
-  if(!window.claude||!window.claude.use){ linkStatus('Two screens need this page open on claude.ai, signed in','caution'); return; }
   LINK.joining=true; linkStatus('Connecting…');
-  if(!LINK.room) LINK.room=await window.claude.use('room');
-  if(!LINK.room){ LINK.joining=false; linkStatus('Two-screen link unavailable in this view (open the link on claude.ai, signed in)','caution'); return; }
-  try{ LINK.nr=await LINK.room.join('lhd-'+code); }catch(e){ LINK.joining=false; linkStatus('Could not join the session. Try again','caution'); return; }
-  LINK.code=code; LINK.joining=false;
+  let nr=null;
+  if(window.claude&&window.claude.use){ try{ if(!LINK.room) LINK.room=await window.claude.use('room'); if(LINK.room) nr=await LINK.room.join('lhd-'+code); }catch(e){ nr=null; } }
+  if(!nr){ nr=localRoom(code,MODE); loadPeer().then(ok=>{ if(ok&&LINK.nr===nr) nr.startPeer(); });
+    $('#linkHint').textContent='Two screens: open this page on both, pick Trainee on one and Instructor on the other, same session code. Works between windows on one computer, and between computers when the network allows a direct connection.'; }
+  LINK.nr=nr; LINK.local=!!nr.local; LINK.role=MODE; LINK.code=code; LINK.joining=false;
   LINK.nr.presence({r:MODE,c:code}).catch(()=>{});
-  LINK.nr.on('cmd',m=>{ if(MODE==='trainee') applyCmd(m.data); });
+  LINK.nr.on('cmd',m=>{ if(MODE!=='trainee') return; const o=instVerify(m.data); if(o) applyCmd(o);
+    else if(performance.now()-INST_REJ>10000){ INST_REJ=performance.now(); log('Instructor command ignored: it was not made with the instructor password','caution'); } });
   LINK.nr.onPeers(ch=>{
     const others=ch.peers.filter(p=>!p.sameTab);
     LINK.peerT=others.find(p=>p.presence&&p.presence.r==='trainee')||null;
@@ -2491,6 +2564,8 @@ async function connectLink(){
 async function leaveLink(){ const nr=LINK.nr; LINK.nr=null; LINK.peerT=LINK.peerI=null; if(nr){ try{await nr.leave();}catch(_){}} }
 function setScreen(m,persist=true){
   if(!['solo','trainee','instructor'].includes(m)) m='solo';
+  if(m==='instructor'&&!INST&&!instRestore()){ instAsk(); if(document.querySelector('#modeSeg [aria-pressed="true"]')) return; m='solo'; }
+  $('#instLock').hidden=true;
   const was=MODE; MODE=m;
   document.body.classList.toggle('mode-trainee',m==='trainee'); document.body.classList.toggle('mode-instructor',m==='instructor');
   document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===m)));
@@ -2501,6 +2576,9 @@ function setScreen(m,persist=true){
 }
 function updateLinkStatus(){
   if(MODE==='solo'||LINK.joining||!LINK.nr) return;
+  if(LINK.local){ const st=LINK.nr.state();
+    if(st==='taken'){ linkStatus('That session code is in use by another trainee. Choose a different code','caution'); return; }
+    if(st==='err'&&!LINK.peerT&&!LINK.peerI&&!LINK.warned){ LINK.warned=true; $('#linkHint').textContent='A direct connection to another computer is not available on this network. Two windows on this computer still link.'; } }
   if(MODE==='trainee') linkStatus(LINK.peerI?`Linked to instructor · ${LINK.code}`:`Waiting for instructor · ${LINK.code}`,LINK.peerI?'ok':'');
   else { const age=LINK.snapAt?Math.round((Date.now()-LINK.snapAt)/1000):null;
     linkStatus(LINK.peerT?(age!=null&&age<5?`Mirroring trainee · ${LINK.code}`:`Trainee connected, waiting for data · ${LINK.code}`):`Waiting for trainee · ${LINK.code}`,LINK.peerT&&age!=null&&age<5?'ok':''); }
@@ -2577,7 +2655,7 @@ log('Normal condition: 27′ fwd / 28′ aft, all ballast tanks empty, stern gat
   $('#sessCode').addEventListener('change',()=>{ try{localStorage.setItem('lhdbt-code',cleanCode());}catch(_){} });
   setScreen(m0,false); }
 render(); requestAnimationFrame(frame);
-window.SIM={S,hydro,solveAndReturn,step,setMode,toggleValve,init,setSpeed,bringCraft,TUNE,rollList,CAS,ACT,injectCas,dbacCmd,snapshot,applySnap,setScreen,sendCmd,D0,W0,LCG0,KG0,G3,AUD,radioReport};
+window.SIM={S,hydro,solveAndReturn,step,setMode,toggleValve,init,setSpeed,bringCraft,TUNE,rollList,CAS,ACT,injectCas,dbacCmd,snapshot,applySnap,setScreen,sendCmd,D0,W0,LCG0,KG0,G3,AUD,radioReport,instPub:pw=>{const k=instKeys(pw);return k?hexOf(k.publicKey):null;}};
 })();
 </script>
 
