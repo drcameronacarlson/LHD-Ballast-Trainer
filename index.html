@@ -394,7 +394,7 @@ body.mode-instructor .mirrorNote{display:block}
           <button class="tbtn" id="radioSend">Send</button>
           <button class="tbtn" id="radioLast" disabled>Report last order</button>
         </div>
-        <p class="note" id="radioMsg">DC Central repeats back your reports and calls main air header pressure while the DBACs run. Turn Sound on to hear the radio. You can also ask for the header pressure.</p>
+        <p class="note" id="radioMsg">DC Central repeats back your reports and calls main air header pressure while the DBACs run. It also carries out orders, for example: Central, start DBACs 1, 2, 3 in accordance with DBAC. Turn Sound on to hear the radio.</p>
         <ol class="log" id="radioLog"></ol>
         <div class="wgrp" style="margin-top:10px">
           <label class="wlbl" for="voxDcc">DC Central voice</label><select id="voxDcc"></select>
@@ -2629,7 +2629,7 @@ function radioFx(on){ const X=AUD.x, ctx=AUD.ctx; if(!X||!ctx) return; const g=X
   if(on){ g.setValueAtTime(.22,t); g.exponentialRampToValueAtTime(.025,t+.09); } else { g.setValueAtTime(.2,t); g.exponentialRampToValueAtTime(.0001,t+.28); } }
 function radioSpeak(t){ // how the text is read aloud: tank numbers digit by digit with "tac", whiskey, psi spelled out
   return t.replace(/\b(\d)-([0-9K]+)-(\d)-([A-Z])\b/g,(m,a,b,c,d)=>`${a} tac ${b==='K'?'kilo':b.split('').join(' ')} tac ${c} tac ${d==='W'?'whiskey':d}`)
-    .replace(/DBACs/g,'D backs').replace(/DBAC[- ]?(\d)/g,'D back $1').replace(/\bpsi\b/gi,'P S I').replace(/ ft$/,' feet').replace(/ 45$/,' forty-five').replace(/DC Central/g,'D C Central');
+    .replace(/DBACs/g,'D backs').replace(/DBAC[- ]?(\d)/g,'D back $1').replace(/\bDBAC\b/g,'D back').replace(/\bpsi\b/gi,'P S I').replace(/ ft$/,' feet').replace(/ 45$/,' forty-five').replace(/DC Central/g,'D C Central');
 }
 const VOX={DCC:'',BM:''}; try{ VOX.DCC=localStorage.getItem('lhdbt-vox-dcc')||''; VOX.BM=localStorage.getItem('lhdbt-vox-bm')||''; }catch(_){}
 const voxNat=v=>/natural|neural|siri|enhanced|premium/i.test(v.name);
@@ -2684,9 +2684,32 @@ function radioTank(txt){
     for(const key of [k,k2]) if(c.includes(key)&&key.length>bl){ best=t; bl=key.length; } }
   return best;
 }
+// Orders to DC Central that it carries out after the repeat-back: start or stop DBACs by number, and man the DBAC rooms.
+// "Central, start DBACs 1, 2, 3 in accordance with DBAC" -> "Start DBAC 1, 2, 3 in accordance with DBAC, aye", then they start.
+const DBW=/(d\s*-?\s*bac?k?s?\b|dee\s*bac?k?s?\b|de\s*bac?k?s?\b|compressors?)/;
+function radioCmd(low){
+  if(/\bman\b/.test(low)&&/room/.test(low)) return {echo:'Man the DBAC rooms',run:()=>ACT.manRooms()};
+  const m=low.match(DBW); if(!m) return null;
+  const start=/\b(start|light off|bring (up|on))\b/.test(low), stop=/\b(stop|secure|shut ?down)\b/.test(low); if(start===stop) return null;
+  let rest=low.slice(m.index+m[0].length), tail=''; const tm=rest.match(/\b(in accordance|iaw|i a w|per)\b.*$/);
+  if(tm){ tail=rest.slice(tm.index).replace(/^(in accordance( with)?|iaw|i a w|per)\s*/,'').replace(new RegExp(DBW.source,'g'),'DBAC').replace(/[^a-z0-9 -]/gi,'').trim(); rest=rest.slice(0,tm.index); }
+  const W={one:1,won:1,two:2,to:2,too:2,three:3,four:4,for:4,five:5,six:6}, nums=[]; let prev=null, range=false;
+  const push=n=>{ if(range&&prev!=null){ for(let k=prev+1;k<=n;k++) nums.push(k); range=false; } else nums.push(n); prev=n; };
+  if(/\ball\b/.test(rest)) nums.push(1,2,3,4,5,6);
+  else for(const tk of rest.replace(/[^a-z0-9]+/g,' ').trim().split(' ')){
+    if(/^\d+$/.test(tk)){ for(const ch of tk){ const n=+ch; if(n>=1&&n<=6) push(n); } }     // "123" heard as one number still means 1, 2, 3
+    else if(tk==='through'||tk==='thru') range=true; else if(W[tk]) push(W[tk]); }
+  const list=[...new Set(nums)].sort((a,b)=>a-b);
+  if(!list.length) return {say:'Central did not copy which DBACs. Say again'};
+  return {echo:`${start?'Start':'Stop'} DBAC ${list.join(', ')}${tail?' in accordance with '+(tail.length<=5?tail.toUpperCase():tail):''}`,
+    run:()=>list.forEach(n=>dbacCmd(S.dbac[n-1],start?'start':'stop'))};
+}
 function radioReport(raw){
   const txt=String(raw||'').trim().replace(/\s+/g,' ').replace(/[.!?]+$/,'').slice(0,140); if(!txt) return;
-  const low=txt.toLowerCase(), tank=radioTank(txt);
+  const low=txt.toLowerCase(), cmd=radioCmd(low);
+  if(cmd){ const said=cmd.echo||txt.charAt(0).toUpperCase()+txt.slice(1); log('You to DC Central: '+said); radioLogAdd('You',said);
+    setTimeout(()=>{ dccCall(cmd.echo?cmd.echo+', aye':cmd.say); if(cmd.run) setTimeout(cmd.run,700); },900); return; }
+  const tank=radioTank(txt);
   const verb=/pre[- ]?de?[- ]?ballast|pressuri/.test(low)?'Pre-deballasting':/de[- ]?ballast|d ballast|blow/.test(low)?'Deballasting':/ballast/.test(low)?'Ballasting':/secur|normal/.test(low)?'Securing':'';
   const echo=tank&&verb?`${verb} ${tank.id}`:txt.charAt(0).toUpperCase()+txt.slice(1);
   log('You to DC Central: '+echo); radioLogAdd('You',echo);
