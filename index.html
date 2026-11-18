@@ -207,6 +207,8 @@ body.mode-instructor .mirrorNote{display:block}
 #newPw{width:20ch}
 #newKey{width:min(100%,68ch)}
 .wellctl select{font-family:var(--font-body);font-size:13px;padding:5px 6px;border:1px solid var(--edge);border-radius:4px;background:var(--btn);color:var(--btn-ink)}
+.ro .v{white-space:nowrap}
+@media (min-width:860px){.readouts{grid-template-columns:repeat(5,minmax(0,1fr))}}
 .foot b{color:var(--ink-2)}
 /* console look: painted steel panels, lensed lamps, illuminated pushbuttons */
 .wdp,.room,.hdr,.trow{--hi:rgba(255,255,255,.16);--lo:rgba(0,0,0,.2)}
@@ -289,6 +291,7 @@ body.mode-instructor .mirrorNote{display:block}
     <div class="ro" id="roG"><span class="k">GM (eff)</span><span class="v">–</span><span class="s"></span></div>
     <div class="ro" id="roB"><span class="k">Ballast on</span><span class="v">–</span><span class="s"></span></div>
     <div class="ro" id="roD"><span class="k">Displacement</span><span class="v">–</span><span class="s"></span></div>
+    <div class="ro" id="roH"><span class="k">Main air header</span><span class="v">–</span><span class="s"></span></div>
   </section>
 
   <div class="main">
@@ -1452,6 +1455,8 @@ function render(){
   setRO('#roG',fmt(S.gm,1)+' ft',`solid ${fmt(S.gmSolid,1)} ft`,S.gm<2?'crit':S.gm<4?'warn':'');
   setRO('#roB',Math.round(S.bal).toLocaleString()+' LT',S.wellLT>1?`+ ${Math.round(S.wellLT).toLocaleString()} LT in well`:`${Math.round(S.bal*FT3_LT).toLocaleString()} ft³`);
   setRO('#roD',Math.round(S.W).toLocaleString()+' LT','long tons');
+  { const on=S.dbac.filter(c=>dbacEff(c)).length, run=S.dbac.filter(c=>c.state!=='off').length;
+    setRO('#roH',fmt(S.Ph,1)+' psig',S.relief?'relief lifting':on?`${on} DBAC${on>1?'s':''} on the header`:run?`${run} DBAC${run>1?'s':''} running unloaded`:'no DBACs running',S.relief?'warn':S.Ph>1?'good':''); }
   setRO('#roS',fmt(S.spd,1)+' kts',Math.abs(S.spdOrd-S.spd)>.05?`coming to ${S.spdOrd} kts`:`limit ${SPD_MAX} for well deck ops`,S.spd>SPD_MAX+.05?'warn':'good');
   { const lc=S.crafts.filter(q=>q.type==='LCU'&&q.state==='docked'); $('#secureBtn').textContent=lc.length&&lc.every(q=>q.lineTgt>=6)?'Cast off lines':'Secure LCU'; }
   document.querySelectorAll('#spdSeg button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.k===S.spdOrd)));
