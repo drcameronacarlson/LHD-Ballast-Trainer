@@ -501,7 +501,7 @@ body.mode-instructor .mirrorNote{display:block}
           </div>
         </div>
       </section>
-      <p class="foot"><b>Sources:</b> S9LHD-AE-SIB-170 Ch. 2 (Distribution A), SWOS 62B-402, LHD-3 SLCP, and a former LHD-5 ballast officer's recollection. Hull shape, tank geometry and GM are estimates tuned to observed drafts (27′/28′ normal, ~24′/38′ ballasted). Not a NAVSEA product. Always follow your ship's EOSS and ballast procedures.</p>
+      <p class="foot"><b>Sources:</b> SWOS 62B-402, LHD-3 SLCP, and a former LHD-5 ballast officer's recollection. Hull shape, tank geometry and GM are estimates tuned to observed drafts (27′/28′ normal, ~24′/38′ ballasted). Not a NAVSEA product. Always follow your ship's EOSS and ballast procedures.</p>
       <details class="foot terms">
         <summary><b>© 2026 Nautical Solutions, LLC. All rights reserved.</b> Terms of use</summary>
         <p>LHD Ballast Trainer is free to use for individual training, instruction and evaluation by U.S. Navy and Marine Corps personnel and the people they train. It is not open source. You may not copy, redistribute, resell, sublicense, or build derivative or commercial products from this software, its physics model or its data without written permission from Nautical Solutions, LLC.</p>
@@ -1532,7 +1532,7 @@ function renderAlarms(){
     else if(c.failing) A.push(['alarm',`DBAC-${c.n} high vibration`]);
     else if(c.failed) A.push(['caution',`DBAC-${c.n} out of service`]);
   }
-  // unloader stuck open: no alarm; the tell is that unit's discharge pressure (SIB: transducer indicates at the DCC)
+  // unloader stuck open: no alarm; the tell is that unit's discharge pressure (transducer indicates at the DCC)
   for(const t of S.tanks) if(t.sea&&Math.abs(t.pos.sea-t.tgt.sea)>.01&&S.t-t.cmdT>STROKE.sea*((!S.dccPower&&S.localCtl)?2:1)+10) A.push(['caution',`${t.id} sea valve not responding`]);
   }
   S.curAlarms=A;
